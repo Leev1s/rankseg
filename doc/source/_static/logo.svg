@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50" width="200" height="50">
+  <style>
+    .text { font-family: Arial, sans-serif; font-weight: bold; }
+  </style>
+  <text x="10" y="35" class="text" font-size="30" fill="#000">
+    Rank<tspan font-weight="900">SEG</tspan>
+  </text>
+</svg>

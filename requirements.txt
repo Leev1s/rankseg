@@ -1,0 +1,6 @@
+# --------- pytorch --------- #
+torch>=2.0.0
+
+
+# --------- others --------- #
+pytest          # tests
