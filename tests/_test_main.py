@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from rankseg import RefinedNormal
+from rankseg import RefinedNormalPB, RefinedNormal
 
 smooth = 0.1
 
@@ -36,17 +36,21 @@ up_tau = torch.argmax(torch.where(ratio_prob - discount[1:dim] - smooth - dim > 
 ## in this case, we set up_tau to be dim-1; we cannot prune the search
 up_tau = torch.where(up_tau == 0, dim-1, up_tau)
 
-low_class, up_class = app_action_set(pb_mean=pb_mean,
-                                    pb_var=pb_var,
-                                    pb_m3=pb_m3,
-                                    device=device,
-                                    dim=dim)
+RNPB_rv = RefinedNormalPB(dim=dim, loc=pb_mean, scale=torch.sqrt(pb_var), skew=pb_skew)
+## truncate the evaluation interval [lq, uq] such that P(lq <= X <= uq) = 1 - p
+lq, uq = RNPB_rv.interval(1e-4)
+max_CI = torch.max(uq - lq)
+supp = torch.arange(max_CI) + lq
+# compute the PMF of the evaluation interval
+pmf_supp = RNPB_rv.pdf(supp)
+pmf_supp = pmf_supp / torch.sum(pmf_supp, axis=1, keepdim=True)
 
-def app_action_set(pb_mean, pb_var, pb_m3, device, dim, tol=1e-4):
-    refined_normal = RN_rv()
-    skew = (pb_m3 / pb_var**(3/2)).cpu() + 1e-5
-    low_quantile = torch.tensor(refined_normal.ppf(tol, skew=skew), device=device)
-    up_quantile = torch.tensor(refined_normal.ppf(1-tol, skew=skew), device=device)
-    lower = torch.maximum(torch.floor(torch.sqrt(pb_var)*low_quantile + pb_mean) - 1, torch.tensor(0))
-    upper = torch.minimum(torch.ceil(torch.sqrt(pb_var)*up_quantile + pb_mean), torch.tensor(dim))
-    return lower.type(torch.int), upper.type(torch.int)
+low_tmp, up_tmp = lq[0:1,0], uq[0:1,0]+up_tau[0:1,0]-1
+pmf_tmp = pmf_supp[0,0]
+
+with torch.backends.cudnn.flags(enabled=False, deterministic=True, benchmark=True):
+    ma_tmp = F.conv1d( (2./(discount[low_tmp:up_tmp]+smooth+2)).view(1,1,-1), pmf_tmp.view(1,1,-1))
+    nu_range = F.conv1d( (smooth/(discount[low_tmp:up_tmp]+smooth+1)).view(1,1,-1), pmf_tmp.view(1,1,-1))
+
+
+F.conv1d( (2./(supp+smooth+2)).view(1,1,-1), pmf_supp.view(1,1,-1))

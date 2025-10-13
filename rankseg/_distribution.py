@@ -12,7 +12,7 @@ from torch.distributions.utils import broadcast_all
 
 ## example: https://pytorch-forecasting.readthedocs.io/en/v0.8.3/_modules/torch/distributions/negative_binomial.html
 
-class RefinedNormal(Distribution):
+class RefinedNormalPB(Distribution):
     r"""
     Refined Normal distribution to approximate Poisson binomial distribution.
     
@@ -38,12 +38,13 @@ class RefinedNormal(Distribution):
     
     def __init__(
         self,
+        dim: Union[Tensor, int],
         loc: Union[Tensor, float],
         scale: Union[Tensor, float],
         skew: Union[Tensor, float],
         validate_args: Optional[bool] = None,
     ):
-        self.loc, self.scale, self.skew = broadcast_all(loc, scale, skew)
+        self.dim, self.loc, self.scale, self.skew = broadcast_all(dim, loc, scale, skew)
         if isinstance(loc, _Number) and isinstance(scale, _Number):
             batch_shape = torch.Size()
         else:
@@ -51,12 +52,13 @@ class RefinedNormal(Distribution):
         super().__init__(batch_shape=batch_shape, validate_args=validate_args)
 
     def expand(self, batch_shape, _instance=None):
-        new = self._get_checked_instance(RefinedNormal, _instance)
+        new = self._get_checked_instance(RefinedNormalPB, _instance)
         batch_shape = torch.Size(batch_shape)
+        new.dim = self.dim.expand(batch_shape)
         new.loc = self.loc.expand(batch_shape)
         new.scale = self.scale.expand(batch_shape)
         new.skew = self.skew.expand(batch_shape)
-        super(RefinedNormal, new).__init__(batch_shape, validate_args=False)
+        super(RefinedNormalPB, new).__init__(batch_shape, validate_args=False)
         new._validate_args = self._validate_args
         return new
 
@@ -81,8 +83,9 @@ class RefinedNormal(Distribution):
         return torch.log(self.pdf(x))
 
     def icdf(self, p, max_iter=1000, tol=1e-6):
+        ## To be optimized: Brent’s method is better for root finding.
         """Inverse CDF (quantile function) using Newton-Raphson method.
-        
+
         Parameters
         ----------
         p : torch.Tensor
@@ -119,23 +122,18 @@ class RefinedNormal(Distribution):
             x = x_new
         return x
 
-
-class RNA_BP(object):
-    """Refined Normal Approximation for Poisson binomial distribution."""
-    def __init__(self, pb_mean, pb_var, pb_m3, device):
-        self.pb_mean = pb_mean
-        self.pb_var = pb_var
-        self.pb_m3 = pb_m3
-        self.skew = (pb_m3 / pb_var**(3/2)).to(device)
-        self.device = device
-    
-    def cdf(self, x):
-        pass
-
-    def pmf(self, x):
-        pass
-
-class RN_rv(scipy.stats.rv_continuous):
+    def interval(self, p):
+        """
+        Compute the confidence interval [lq, uq] such that P(lq <= X <= uq) = 1 - p.
+        """
+        scipy_refined_normal = RefinedNormal()
+        lq, uq = scipy_refined_normal.interval(1-p, skew=self.skew)
+        lq, uq = torch.Tensor(lq), torch.Tensor(uq)
+        lq = torch.clip(torch.floor(self.scale*lq + self.loc) - 1, min=0)
+        uq = torch.clip(torch.ceil(self.scale*uq + self.loc), max=self.dim)
+        return lq.int(), uq.int()
+        
+class RefinedNormal(scipy.stats.rv_continuous):
     """Refined Normal distribution to approximate Poisson binomial distribution.
 
     This class extends the continuous random variable class from SciPy to implement
@@ -180,11 +178,6 @@ class RN_rv(scipy.stats.rv_continuous):
     
     def _pdf(self, x, skew):
         return scipy.stats.norm.pdf(x) + skew/6*scipy.stats.norm.pdf(x)*(3*x - x**3)
-
-## test
-refined_norm = RN_rv()
-print(refined_norm.cdf([.1,.2,-.3], skew=[1,2,3]))
-print(refined_norm.ppf([.1,.2,.3], skew=[1,2,3]))
 
 def app_action_set(pb_mean, pb_var, pb_m3, device, dim, tol=1e-4):
     """Compute approximate action set bounds for Poisson binomial distribution.
