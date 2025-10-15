@@ -78,18 +78,66 @@ def rankseg_ba_(probs,
     up_tau = torch.where(up_tau == 0, dim-1, up_tau)
 
     ## compute the PMF of the evaluation interval
-    RNPB_rv = RefinedNormalPB(dim=dim, loc=pb_mean, scale=torch.sqrt(pb_var), skew=pb_skew)
+    RNPB_rv = RefinedNormalPB(dim=dim, loc=pb_mean, scale=pb_scale, skew=pb_skew)
     # Step 1: truncate the evaluation interval [lq, uq] such that P(lq <= X <= uq) = 1 - p
     lq, uq = RNPB_rv.interval(1e-4)
     max_CI = torch.max(uq - lq)
-    supp = torch.arange(max_CI) + lq
+    supp = (torch.arange(max_CI) + lq).view(batch_size, num_class, -1)
     # Step 2: compute the PMF of the evaluation interval
     pmf_supp = RNPB_rv.pdf(supp)
     pmf_supp = pmf_supp / torch.sum(pmf_supp, axis=1, keepdim=True)
 
+    ## Compute ALL pruning masks upfront (fully vectorized)
+    mask_prune_prob = (sorted_prob[:,:,0] < 0.5) & pruning  # (batch, num_class)
+    mask_prune_tau = up_tau < lq  # Assuming lq is the lower bound check
+    mask_small_mean = pb_mean <= 50
+    
+    mask_skip = mask_prune_prob | mask_prune_tau  # Skip entirely
+
+    mask_use_ba = (pb_mean > 50) & (~mask_skip)  # Use BA
+    mask_use_rna = mask_small_mean & (~mask_skip)  # Use RNA
+
     for k in range(num_class):
-        ## searching for optimal vol for each sample and each class
+        ba_indices = torch.where(mask_use_ba[:, k])[0]
+        rna_indices = torch.where(mask_use_rna[:, k])[0]
+        skip_indices = torch.where(mask_skip[:, k])[0]
+
+        if len(ba_indices) > 0:
+            pmf_tmp = pmf_supp[mask_use_ba[:, k], k]
+            ## use convolutional layer to compute (13) in the reference
+            low_tmp = lq[mask_use_ba[:, k], k]
+            up_tmp = uq[mask_use_ba[:, k], k] + up_tau[mask_use_ba[:, k], k] - 1
+            max_range_len = torch.max(up_tmp - low_tmp)
+            right_range = torch.arange(max_range_len) + low_tmp.view(-1,1) + 1
+            # left, right in (13) of the paper 
+            right_denom_tmp = discount[right_range] + smooth + 1
+            left_tmp = pmf_tmp.view(-1,1,1)
+            # compute (13)                 
+            with torch.backends.cudnn.flags(enabled=False, deterministic=True, benchmark=True):
+                ma_tmp = F.conv1d(1.0/(right_denom_tmp+1), left_tmp)
+                nu_range = F.conv1d(smooth/right_denom_tmp, left_tmp)
+
+            w_range = 2.0*ma_tmp*cumsum_prob[b,k,:up_tau[b,k]]
+            
+            ## compute score for the range: tilde pi in the paper
+            score_range = w_range + nu_range
+            score_range = score_range.flatten()
+            opt_tau = torch.argmax(score_range)+1
+            best_score = score_range[opt_tau-1]
+            score_zero = smooth*torch.sum( (1./(discount[low_tmp:up_tmp]+smooth)) * pmf_tmp )
+            
+            if best_score <= score_zero:
+                best_score = score_zero
+                opt_tau = 0
+
+
+
+    ## searching for optimal vol for each sample and each class
+    for k in range(num_class):
         for b in range(batch_size):
+            ## prune cases: 
+            # (i) the first probability is less than .5 and pruning is enabled
+            # (ii) upper bound of tau is less than the lower bound of the truncated interval
             if (sorted_prob[b,k,0] <= .5) and pruning:
                 ## pruning for predicted TP = FP = 0
                 continue
@@ -100,6 +148,7 @@ def rankseg_ba_(probs,
                 app_tmp = 1
             else:
                 app_tmp = app
+            
             ## if the upper bounds of the optimal tau is less than the lower bounds of the truncated interval, 
             # we simply take the upper bound as the optimal tau;
             if up_tau[b,k] <= low_class[b,k]:
@@ -122,6 +171,7 @@ def rankseg_ba_(probs,
                 # left, right in (13) of the paper 
                 right_denom_tmp = (discount[low_tmp:up_tmp]+smooth+1).view(1,1,-1)
                 left_tmp = pmf_tmp.view(1,1,-1)
+                
                 # compute (13)                 
                 with torch.backends.cudnn.flags(enabled=False, deterministic=True, benchmark=True):
                     ma_tmp = F.conv1d(1.0/(right_denom_tmp+1), left_tmp)
@@ -134,13 +184,15 @@ def rankseg_ba_(probs,
                 score_range = score_range.flatten()
                 opt_tau = torch.argmax(score_range)+1
                 best_score = score_range[opt_tau-1]
-                score_zero = smooth*torch.sum( (1./(discount[low_class[b,k]:up_class[b,k]]+smooth)) * pmf_tmp )
+                score_zero = smooth*torch.sum( (1./(discount[low_tmp:up_tmp]+smooth)) * pmf_tmp )
                 
                 if best_score <= score_zero:
                     best_score = score_zero
                     opt_tau = 0
+                
                 if verbose == 1:
                     print('Pred sample-%d; class-%d; mean_pb: %.1f; up_tau:%d; tau_best: %d; score_best: %.4f' %(b, k, pb_mean[b,k], up_tau[b,k], opt_tau, best_score))
+            
             if app_tmp <= 1:
                 sorted_prob_tmp = sorted_prob[b,k]
                 pmf_tmp_zero = PB_RNA(pb_mean[b,k],
