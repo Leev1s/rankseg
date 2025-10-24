@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from rankseg import rankdice_batch_, RefinedNormalPB, RefinedNormal
+from rankseg import rankdice_batch, RefinedNormalPB, RefinedNormal
 from _rankseg_full import rank_dice, PB_RNA, app_action_set
 
 B, C, W, H = 32, 1, 16, 16
@@ -9,7 +9,7 @@ labels = torch.bernoulli(probs)
 
 probs, labels = probs.cuda(), labels.cuda()
 
-preds, cutpoint_rd = rankdice_batch_(probs, solver='BA', eps=2e-4)
+preds, cutpoint_rd = rankdice_batch(probs, solver='BA', eps=2e-4)
 
 preds_old, _, _ = rank_dice(output=probs, device=probs.device, app=2, smooth=0.0, verbose=0)
 

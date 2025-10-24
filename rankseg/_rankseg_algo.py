@@ -6,13 +6,13 @@ import scipy
 import torch
 import torch.nn.functional as F
 from rankseg._distribution import RefinedNormalPB
+import warnings
 
-def rankdice_batch_(probs, 
+def rankdice_batch(probs, 
                    solver='BA', 
                    smooth=0.0, 
-                   pruning=True,
                    eps=1e-4,
-                   verbose=0):
+                   pruning_prob=0.5):
     """
     Produce the predicted segmentation by `rankdice` based on the estimated output probability.
 
@@ -23,7 +23,7 @@ def rankdice_batch_(probs,
     
     solver: str, {'exact', 'TRNA', 'BA'}
         The approximate algorithm used to implement `RankDice`. 
-        `exact` indicates exact evaluation (under development),  
+        `exact` indicates exact evaluation (under development),
         `TRNA` indicates the truncated refined normal approximation (T-RNA), and 
         `BA` indicates the blind approximation (BA),
         `auto` indicates automatic selection of the solver: 
@@ -33,8 +33,11 @@ def rankdice_batch_(probs,
     smooth: float, default=0.0
         A smooth parameter in the Dice metric.
     
-    verbose: bool, default=0
-        Whether print the results for each batch and class.
+    eps: float, default=1e-4
+        The threshold for truncation of the pmf of posisson-binomial distribution, if the probability is less than `eps`, we truncate it to 0.
+
+    pruning_prob: float, default=0.5
+        The threshold for pruning, if all probabilities are less than `pruning_prob`, we skip the class.
 
     Return
     ------
@@ -44,21 +47,25 @@ def rankdice_batch_(probs,
     tau_rd: Tensor, shape (batch_size, num_class)
         The total number of segmentation pixels
 
-    cutpoint_rd: Tensor, shape (batch_size, num_class)
-        The cutpoint of probabilties of segmentation pixels and non-segmentation pixels
+    prob_cutoff: Tensor, shape (batch_size, num_class)
+        The prob_cutoff of probabilties of segmentation pixels and non-segmentation pixels
 
     Reference
     ---------
-    
+
+    Dai, B., & Li, C. (2023). RankSEG: a consistent ranking-based framework for segmentation. Journal of Machine Learning Research, 24(224), 1-50.
     """
 
     batch_size, num_class, width, height = probs.shape
+    if num_class > 1:
+        warnings.warn('the number of classes is greater than 1, the preds will be many binary masks when using rankdice; the masks may overlap across classes')
+
     probs = torch.flatten(probs, start_dim=2, end_dim=-1)
     dim = probs.shape[-1]
     device = probs.device
     ## initialize
     preds = torch.zeros(batch_size, num_class, dim, dtype=torch.bool, device=device)
-    cutpoint_rd = torch.zeros(batch_size, num_class, device=device)
+    prob_cutoff = torch.zeros(batch_size, num_class, device=device)
     ## precomputed constants
     discount = torch.arange(2*dim+1, device=device)
 
@@ -70,7 +77,7 @@ def rankdice_batch_(probs,
     del probs
     
     ## Compute ALL pruning masks upfront
-    mask_skip = (sorted_prob[:,:,0] < 0.5) & pruning  # (batch, num_class)
+    mask_skip = (sorted_prob[:,:,0] < pruning_prob)  # (batch, num_class)
     # mask_prune_tau = up_tau < lq ## since all prob are very small
 
     ## compute cumsum and ratio
@@ -158,7 +165,7 @@ def rankdice_batch_(probs,
             best_score = pi[opt_tau]
 
             preds[b, k, top_index[b,k,:opt_tau]] = True
-            cutpoint_rd[b,k] = sorted_prob[b,k,opt_tau]
+            prob_cutoff[b,k] = sorted_prob[b,k,opt_tau]
 
         for b_idx, b in enumerate(trna_indices):
             ## compute (12) in RankSEG JMLR paper
@@ -200,6 +207,6 @@ def rankdice_batch_(probs,
                     opt_tau = tau
 
                 preds[b, k, top_index[b,k,:opt_tau]] = True
-                cutpoint_rd[b,k] = sorted_prob[b,k,opt_tau]
+                prob_cutoff[b,k] = sorted_prob[b,k,opt_tau]
     
-    return preds.reshape(batch_size, num_class, width, height), cutpoint_rd
+    return preds.reshape(batch_size, num_class, width, height), prob_cutoff

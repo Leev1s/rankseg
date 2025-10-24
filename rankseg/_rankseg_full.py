@@ -111,7 +111,8 @@ def rank_dice(output, device, app=2, smooth=0.,
                 tau_rd[b,k] = opt_tau
                 cutpoint_rd[b,k] = sorted_prob[b,k,opt_tau]
                 print('Sample-%d; Class-%d: up_tau <= low_class, set tau_rd = %d' %(b, k, opt_tau))
-                print('up_tau: %d; low_class: %d' %(up_tau[b,k], low_class[b,k]))
+                print('cutpoint_rd: %.3f' %sorted_prob[b,k,opt_tau])
+                print('up_tau: %d; low_class: %d; max_dim: %d' %(up_tau[b,k], low_class[b,k], dim))
                 continue
             if app_tmp > 1:
                 pmf_tmp = PB_RNA(pb_mean[b,k],

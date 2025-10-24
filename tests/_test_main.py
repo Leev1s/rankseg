@@ -1,13 +1,13 @@
 import torch
 import torch.nn.functional as F
-from rankseg import rankdice_batch_, rank_dice
+from rankseg import rankdice_batch, rank_dice
 
 probs = torch.load('./tests/data/demo_probs.pt')
 labels = torch.load('./tests/data/demo_labels.pt')
 
 probs, labels = probs.cuda(), labels.cuda()
 
-preds, cutpoint_rd = rankdice_batch_(probs, solver='BA', eps=1e-4)
+preds, cutpoint_rd = rankdice_batch(probs, solver='BA', eps=1e-4)
 
 preds_old, _, _ = rank_dice(output=probs, device=probs.device, app=2, smooth=0.0)
 
