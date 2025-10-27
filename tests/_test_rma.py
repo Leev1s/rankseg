@@ -8,7 +8,7 @@ labels = torch.load('./tests/data/demo_labels.pt')
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 probs, labels = probs.to(device), labels.to(device)
 
-preds, cutpoint_rd = rankdice_batch(probs, solver='BA', eps=1e-4)
+preds = rankdice_batch(probs, solver='BA', eps=1e-4)
 
 preds_rma_overlap = rankseg_rma(probs, allow_overlap=True)
 preds_rma = rankseg_rma(probs)
