@@ -8,11 +8,11 @@ import torch.nn.functional as F
 from rankseg._distribution import RefinedNormalPB
 import warnings
 
-def rankdice_batch(probs, 
-                   solver='BA', 
-                   smooth=0.0, 
-                   eps=1e-4,
-                   pruning_prob=0.5):
+def rankdice_batch(probs: torch.Tensor, 
+                   solver: str='BA', 
+                   smooth: float=0.0, 
+                   eps: float=1e-4,
+                   pruning_prob: float=0.5):
     """
     Produce the predicted segmentation by `rankdice` based on the estimated output probability.
 
@@ -44,12 +44,6 @@ def rankdice_batch(probs,
     predict: Tensor, shape (batch_size, num_class, width, height)
         The predicted segmentation based on `rankdice`.
 
-    tau_rd: Tensor, shape (batch_size, num_class)
-        The total number of segmentation pixels
-
-    prob_cutoff: Tensor, shape (batch_size, num_class)
-        The prob_cutoff of probabilties of segmentation pixels and non-segmentation pixels
-
     Reference
     ---------
 
@@ -65,7 +59,7 @@ def rankdice_batch(probs,
     device = probs.device
     ## initialize
     preds = torch.zeros(batch_size, num_class, dim, dtype=torch.bool, device=device)
-    prob_cutoff = torch.zeros(batch_size, num_class, device=device)
+    # prob_cutoff = torch.zeros(batch_size, num_class, device=device)
     ## precomputed constants
     discount = torch.arange(2*dim+1, device=device)
 
@@ -165,7 +159,7 @@ def rankdice_batch(probs,
             best_score = pi[opt_tau]
 
             preds[b, k, top_index[b,k,:opt_tau]] = True
-            prob_cutoff[b,k] = sorted_prob[b,k,opt_tau]
+            # prob_cutoff[b,k] = sorted_prob[b,k,opt_tau]
 
         for b_idx, b in enumerate(trna_indices):
             ## compute (12) in RankSEG JMLR paper
@@ -207,9 +201,9 @@ def rankdice_batch(probs,
                     opt_tau = tau
 
                 preds[b, k, top_index[b,k,:opt_tau]] = True
-                prob_cutoff[b,k] = sorted_prob[b,k,opt_tau]
+                # prob_cutoff[b,k] = sorted_prob[b,k,opt_tau]
     
-    return preds.reshape(batch_size, num_class, width, height), prob_cutoff
+    return preds.reshape(batch_size, num_class, width, height)
 
 
 def rankseg_rma(
