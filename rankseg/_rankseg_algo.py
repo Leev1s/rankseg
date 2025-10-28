@@ -21,12 +21,12 @@ def rankdice_batch(probs: torch.Tensor,
     probs: Tensor, shape (batch_size, num_class, width, height)
         The estimated probability tensor. 
     
-    solver: str, {'exact', 'TRNA', 'BA'}
+    solver: str, {'exact', 'TRNA', 'BA', 'BA+TRNA'}
         The approximate algorithm used to implement `RankDice`. 
         `exact` indicates exact evaluation (under development),
         `TRNA` indicates the truncated refined normal approximation (T-RNA), and 
         `BA` indicates the blind approximation (BA),
-        `auto` indicates automatic selection of the solver: 
+        `BA+TRNA` indicates a combination of both BA and TRNA.
             - we use Cohen's d to determine if we use BA or TRNA
             - if Cohen's d is less than 0.2, we use BA; otherwise, we use TRNA
     
@@ -51,8 +51,6 @@ def rankdice_batch(probs: torch.Tensor,
     """
 
     batch_size, num_class, width, height = probs.shape
-    if num_class > 1:
-        warnings.warn('the number of classes is greater than 1, the preds will be many binary masks when using rankdice; the masks may overlap across classes')
 
     probs = torch.flatten(probs, start_dim=2, end_dim=-1)
     dim = probs.shape[-1]
@@ -209,7 +207,7 @@ def rankdice_batch(probs: torch.Tensor,
 def rankseg_rma(
         probs: torch.Tensor,
         metric: str="dice",
-        allow_overlap: bool=False,
+        return_binary_masks: bool=False,
         smooth: float=0.0,
         pruning_prob: float=0.1,
     ) -> torch.Tensor:
@@ -224,8 +222,10 @@ def rankseg_rma(
     metric: str, default='dice'
         The metric aim to optimize, either 'iou' or 'dice'.
 
-    allow_overlap: bool, default=False
-        Whether to allow overlapping in multi-class segmentation.
+    return_binary_masks: bool, default=False
+        Whether to return or allow binary masks per class (multi-label segmentation).
+        If False, performs multi-class segmentation where each pixel belongs to exactly one class.
+        If True, performs multi-label segmentation where pixels can belong to multiple classes.
 
     smooth: float, default=0.0
         A smooth parameter in the Dice metric.
@@ -235,7 +235,7 @@ def rankseg_rma(
 
     Return
     ------
-    preds: Tensor, shape (batch_size, num_class, width, height) if allow_overlap is True,
+    preds: Tensor, shape (batch_size, num_class, width, height) if return_binary_masks is True,
         otherwise shape (batch_size, width, height)
     """
 
@@ -296,7 +296,7 @@ def rankseg_rma(
         nonoverlap_predict[overlap_mask] = increment_argmax_mask[overlap_mask].type(torch.uint8)
         return nonoverlap_predict
 
-    is_binary = (probs.shape[1] == 2) and not allow_overlap
+    is_binary = (probs.shape[1] == 2) and not return_binary_masks
 
     if is_binary:
         probs = probs[:, 1:2, ...]
@@ -320,7 +320,7 @@ def rankseg_rma(
                 continue
             overlap_preds[b, c, top_index[b, c, :opt_tau[b, c]]] = True
 
-    if allow_overlap:
+    if return_binary_masks:
         preds = overlap_preds.reshape(batch_size, num_classes, *img_shape)
     else:
         if is_binary:

@@ -11,9 +11,9 @@ probs, labels = probs.to(device), labels.to(device)
 rankseg_ba_obj = RankSEG(metric='dice', solver='BA')
 preds = rankseg_ba_obj.predict(probs)
 
-rankseg_rma_obj = RankSEG(metric='dice', solver='RMA', allow_overlap=True)
+rankseg_rma_obj = RankSEG(metric='dice', solver='RMA', return_binary_masks=True)
 preds_rma_overlap = rankseg_rma_obj.predict(probs)
-rankseg_rma_obj = RankSEG(metric='dice', solver='RMA', allow_overlap=False)
+rankseg_rma_obj = RankSEG(metric='dice', solver='RMA', return_binary_masks=False)
 preds_rma = rankseg_rma_obj.predict(probs)
 
 print("=" * 70)
