@@ -1,20 +1,3 @@
-# --------- pytorch --------- #
 torch>=2.0.0
-sphinx_copybutton
-sphinx_design
-myst_parser
-jupyter_sphinx
-sphinx_togglebutton
-nbsphinx
-numpydoc
-sphinx_sitemap
-sphinxcontrib.mermaid
-sphinxcontrib.video
-sphinxcontrib.youtube
-sphinx_click
-sphinx_sqlalchemy
-sphinx_contributors
-sphinx_prompt
-
-# --------- others --------- #
-pytest          # tests
+scipy
+numpy

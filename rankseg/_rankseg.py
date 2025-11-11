@@ -104,7 +104,7 @@ class RankSEG(object):
         """
         batch_size, num_class, *image_shape = probs.shape
 
-        if self.metric == 'dice':
+        if self.metric in ['dice', 'Dice', 'DICE']:
             if self.solver in ['BA', 'TRNA', 'BA+TRNA']:
                 if (not self.return_binary_masks) and (num_class > 1):
                     warnings.warn('For Dice metric with BA/TRNA/BA+TRNA solver, it only supports returning binary masks per class (multi-label segmentation). Thus, `return_binary_masks` is automatically set as `return_binary_masks=True`.')
@@ -125,7 +125,7 @@ class RankSEG(object):
                                     **self.solver_params)
             else:
                 raise ValueError('Unknown solver: %s' % self.solver)
-        elif self.metric == 'IoU':
+        elif self.metric in ['IoU', 'IOU', 'iou']:
             if self.solver == 'RMA':
                 pass
             else:
@@ -138,7 +138,7 @@ class RankSEG(object):
                     return_binary_masks=self.return_binary_masks,
                     **self.solver_params)
 
-        elif self.metric == 'AP':
+        elif self.metric in ['AP', 'ap']:
             if (self.return_binary_masks) or (num_class == 1):
                 ## simply take thresholding at 0.5 over classes
                 preds = torch.where(probs > .5, True, False)
