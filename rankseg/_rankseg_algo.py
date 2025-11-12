@@ -9,7 +9,7 @@ def rankdice_ba(probs: torch.Tensor,
                    solver: str='BA', 
                    smooth: float=0.0, 
                    eps: float=1e-4,
-                   pruning_prob: float=0.5):
+                   pruning_prob: float=0.5) -> torch.Tensor:
     """
     Produce the predicted segmentation by `rankdice` based on the estimated output probability.
 
@@ -46,8 +46,8 @@ def rankdice_ba(probs: torch.Tensor,
 
     References
     ----------
-    Dai, B., & Li, C. (2023). RankSEG: a consistent ranking-based framework for 
-    segmentation. Journal of Machine Learning Research, 24(224), 1-50.
+    .. [1] Dai, B., & Li, C. (2023). RankSEG: a consistent ranking-based framework for 
+           segmentation. Journal of Machine Learning Research, 24(224), 1-50.
     """
 
     batch_size, num_class, *image_shape = probs.shape
@@ -207,9 +207,9 @@ def rankdice_ba(probs: torch.Tensor,
 def rankseg_rma(
         probs: torch.Tensor,
         metric: str="dice",
-        return_binary_masks: bool=False,
         smooth: float=0.0,
-        pruning_prob: float=0.1,
+        output_mode: str='multiclass',
+        pruning_prob: float=0.5,
     ) -> torch.Tensor:
     """
     Produce the predicted segmentation by `rankdice` based on the estimated output probability.
@@ -222,10 +222,10 @@ def rankseg_rma(
     metric : str, default='dice'
         The metric aim to optimize, either 'iou' or 'dice'.
 
-    return_binary_masks : bool, default=False
-        Whether to return or allow binary masks per class (multi-label segmentation).
-        If False, performs multi-class segmentation where each pixel belongs to exactly one class.
-        If True, performs multi-label segmentation where pixels can belong to multiple classes.
+    output_mode : {'multiclass', 'multilabel'}, default='multiclass'
+        Controls overlap behavior of the predictions.
+        - 'multiclass': non-overlapping; each pixel belongs to exactly one class.
+        - 'multilabel': overlapping; pixels can belong to multiple classes (binary mask per class).
 
     smooth : float, default=0.0
         A smooth parameter in the Dice metric.
@@ -237,7 +237,7 @@ def rankseg_rma(
     Returns
     -------
     preds : Tensor
-        Shape (batch_size, num_class, \*image_shape) if return_binary_masks is True,
+        Shape (batch_size, num_class, \*image_shape) if output_mode == 'multilabel',
         otherwise shape (batch_size, \*image_shape)
     """
 
@@ -298,6 +298,7 @@ def rankseg_rma(
         nonoverlap_predict[overlap_mask] = increment_argmax_mask[overlap_mask].type(torch.uint8)
         return nonoverlap_predict
 
+    return_binary_masks = (output_mode == 'multilabel')
     is_binary = (probs.shape[1] == 2) and not return_binary_masks
 
     if is_binary:

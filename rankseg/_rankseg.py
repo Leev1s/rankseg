@@ -16,19 +16,18 @@ class RankSEG(object):
     metric : str, default='dice'
         The segmentation metric to optimize. Currently supported:
         
-        - 'dice': Dice coefficient (F1 score)
-        - 'IoU': Intersection over Union (not yet implemented)
-        - 'AP': Average Precision (not yet implemented)
+        - 'dice': Dice coefficient
+        - 'IoU': Intersection over Union
+        - 'Acc': Accuracy 
     
     smooth : float, default=0.0
         Smoothing parameter added to numerator and denominator to avoid
         division by zero and improve numerical stability.
 
-    return_binary_masks : bool, default=False
-        Whether to return or allow binary masks per class (multi-label segmentation). 
-        Generally, this is only meaningful when segmentation datasets contain multiple labels.
-        If False, performs multi-class segmentation where each pixel belongs to exactly one class.
-        If True, performs multi-label segmentation where pixels can belong to multiple classes.
+    output_mode : {'multiclass', 'multilabel'}, default='multiclass'
+        Controls whether predictions are non-overlapping or overlapping.
+        - 'multiclass': non-overlapping; each pixel belongs to exactly one class.
+        - 'multilabel': overlapping; pixels can belong to multiple classes (binary mask per class).
 
     solver : str, default='RMA'
         The optimization solver to use. Options:
@@ -45,9 +44,10 @@ class RankSEG(object):
           
           - 'RMA': Reciprocal moment approximation
           
-        - When metric is 'AP':
+        - When metric is 'Acc':
           
-          - simply taking argmax or truncation (at 0.5) over classes
+          - 'argmax': argmax solver
+          - 'TR': truncation solver
     
     pruning_prob : float, default=0.5
         Probability threshold for pruning. Classes with maximum probability
@@ -74,13 +74,13 @@ class RankSEG(object):
     def __init__(self,
                  metric: str='dice',
                  smooth: float=0.,
-                 return_binary_masks: bool=False,
+                 output_mode: str='multiclass',
                  solver: str='RMA',
                  pruning_prob: float=0.5,
                  **solver_params):
         self.metric = metric
         self.smooth = smooth
-        self.return_binary_masks = return_binary_masks
+        self.output_mode = output_mode
         self.solver = solver
         self.pruning_prob = pruning_prob
         self.solver_params = solver_params
@@ -103,51 +103,84 @@ class RankSEG(object):
             Values are 0 or 1 (or boolean True/False depending on solver).
         """
         batch_size, num_class, *image_shape = probs.shape
+        
+        ## check output mode
+        if self.output_mode not in ['multiclass', 'multilabel']:
+            raise ValueError('Unknown output mode: %s' % self.output_mode)
+        
+        if self.solver == 'exact':
+            raise ValueError('Exact solver is not implemented yet') ## TODO: implement exact solver
 
         if self.metric in ['dice', 'Dice', 'DICE']:
-            if self.solver in ['BA', 'TRNA', 'BA+TRNA']:
-                if (not self.return_binary_masks) and (num_class > 1):
-                    warnings.warn('For Dice metric with BA/TRNA/BA+TRNA solver, it only supports returning binary masks per class (multi-label segmentation). Thus, `return_binary_masks` is automatically set as `return_binary_masks=True`.')
-                    self.return_binary_masks = True
-                preds = rankdice_ba(probs, 
-                                    solver=self.solver,
-                                    smooth=self.smooth,
-                                    pruning_prob=self.pruning_prob,
-                                    **self.solver_params)
-            elif self.solver == 'exact':
-                raise NotImplementedError('Exact solver is not implemented yet')
-            elif self.solver == 'RMA':
+            if self.solver not in ['BA', 'TRNA', 'BA+TRNA', 'RMA']:
+                warnings.warn("Currently, we only support BA, TRNA, BA+TRNA, RMA solvers for Dice metric; `solver` is automatically set as `RMA`.")
+                self.solver = 'RMA'
+
+            if self.solver == 'RMA':
                 preds = rankseg_rma(probs,
                                     metric=self.metric,
+                                    output_mode=self.output_mode,
                                     smooth=self.smooth,
                                     pruning_prob=self.pruning_prob,
-                                    return_binary_masks=self.return_binary_masks,
                                     **self.solver_params)
             else:
-                raise ValueError('Unknown solver: %s' % self.solver)
+                if (self.output_mode == 'multiclass') and (num_class > 1):
+                    warnings.warn('For Dice metric with BA/TRNA/BA+TRNA solver, it only supports returning binary masks per class (multi-label segmentation). Thus, `solver` is automatically set as `RMA`.')
+                    self.solver = 'RMA'
+
+                    preds = rankseg_rma(probs,
+                                        metric=self.metric,
+                                        smooth=self.smooth,
+                                        pruning_prob=self.pruning_prob,
+                                        output_mode=self.output_mode,
+                                        **self.solver_params)
+                else:
+                    preds = rankdice_ba(probs, 
+                                        solver=self.solver,
+                                        smooth=self.smooth,
+                                        pruning_prob=self.pruning_prob,
+                                        **self.solver_params)
+
         elif self.metric in ['IoU', 'IOU', 'iou']:
-            if self.solver == 'RMA':
-                pass
-            else:
-                warnings.warn('Currently, only RMA supports IoU optimization, and RankSEG automatically switches to the RMA solver.')
+            if self.solver != 'RMA':
+                warnings.warn("Currently, we only support RMA solver for IoU metric; `solver` is automatically set as `RMA`.")
+                self.solver = 'RMA'
             
             preds = rankseg_rma(probs,
                     metric=self.metric,
+                    output_mode=self.output_mode,
                     smooth=self.smooth,
                     pruning_prob=self.pruning_prob,
-                    return_binary_masks=self.return_binary_masks,
                     **self.solver_params)
 
-        elif self.metric in ['AP', 'ap']:
-            if (self.return_binary_masks) or (num_class == 1):
+        elif self.metric in ['Acc', 'acc', 'accuracy', 'ACC', 'Accuracy']:
+            if num_class == 1:
                 ## simply take thresholding at 0.5 over classes
-                preds = torch.where(probs > .5, True, False)
+                preds = torch.where(probs > .5, 1, 0)
             else:
-                ## simply take argmax over classes
-                preds = torch.zeros_like(probs)
-                class_indices = torch.argmax(probs, dim=1, keepdim=True)
-                preds.scatter_(1, class_indices, 1)
+                if self.output_mode == 'multilabel':
+                    if self.solver == 'argmax':
+                        ## argmax produces non-overlapping output, inconsistent with multilabel mode
+                        warnings.warn(
+                            "Returning argmax binary masks. For multilabel segmentation with accuracy metric, argmax solver "
+                            "produces non-overlapping predictions (multiclass output). Consider using 'TR' "
+                            "solver for true multilabel outcome. "
+                        )
+                        preds = torch.zeros_like(probs)
+                        class_indices = torch.argmax(probs, dim=1, keepdim=True)
+                        preds.scatter_(1, class_indices, 1)
 
+                    elif self.solver == 'TR':
+                        ## simply take truncation at 0.5 over classes
+                        preds = torch.where(probs > .5, 1, 0)
+                    else:
+                        warnings.warn('Currently, only argmax and truncation solvers support overlapping multi-class segmentation, and RankSEG automatically switches to the TR solver.')
+                        preds = torch.where(probs > .5, 1, 0)
+                else:
+                    if self.solver != 'argmax':
+                        warnings.warn('Currently, only argmax solver supports non-overlapping multi-class segmentation, and RankSEG automatically switches to the argmax solver.')
+                    ## simply take argmax over classes
+                    preds = torch.argmax(probs, dim=1)
         else:
             raise ValueError('Unknown metric: %s' % self.metric)
         return preds

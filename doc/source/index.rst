@@ -6,8 +6,8 @@
 🧩 RankSEG
 ==========
 
-.. image:: figs/logo.png
-   :width: 18%
+.. image:: _static/logo.png
+   :width: 28%
    :align: right
 
 .. -*- mode: rst -*-
@@ -46,7 +46,10 @@
 
 **RankSEG** is a statistically consistent framework for semantic segmentation that provides *plug-and-play* modules to improve segmentation results during inference.
 
-RankSEG-based methods are theoretically-grounded segmentation approaches that are **statistically consistent** with respect to popular segmentation metrics like **Dice**, **IoU**, and **AP**. They provide *almost guaranteed* improved performance over traditional thresholding or argmax segmentation methods.
+RankSEG-based methods are theoretically-grounded segmentation approaches that are **statistically consistent** with respect to popular segmentation metrics like **Dice** and **IoU**. They provide *almost guaranteed* improved performance over traditional thresholding or argmax segmentation methods.
+
+.. note::
+    RankSEG optimizes metrics using a *samplewise* aggregation: the score is computed per sample and then averaged across the dataset (akin to ``aggregation_level='samplewise'`` in `TorchMetrics DiceScore <https://lightning.ai/docs/torchmetrics/stable/segmentation/dice.html>`_). See :ref:`metrics` for details.
 
 Key Properties
 --------------
@@ -55,7 +58,7 @@ Key Properties
     :widths: 25 75
 
     * - **🎯 Metric-Optimized**
-      - Directly optimizes for Dice, IoU, or AP metrics instead of using generic ad-hoc `argmax` during inference.
+      - Directly optimizes for Dice or IoU metrics instead of using generic ad-hoc `argmax` during inference.
     * - **🔌 Plug-and-Play**
       - Works with ANY pre-trained segmentation model without retraining
     * - **⚡ Efficient Solvers**
@@ -204,4 +207,5 @@ Learn More
    :hidden:
 
    getting_started
+   metrics
    citation

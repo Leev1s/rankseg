@@ -154,7 +154,7 @@ Package Contents
           Applications 40, 791-794.
 
 
-.. py:function:: rankdice_ba(probs: torch.Tensor, solver: str = 'BA', smooth: float = 0.0, eps: float = 0.0001, pruning_prob: float = 0.5)
+.. py:function:: rankdice_ba(probs: torch.Tensor, solver: str = 'BA', smooth: float = 0.0, eps: float = 0.0001, pruning_prob: float = 0.5) -> torch.Tensor
 
    Produce the predicted segmentation by `rankdice` based on the estimated output probability.
 
@@ -191,11 +191,11 @@ Package Contents
 
    References
    ----------
-   Dai, B., & Li, C. (2023). RankSEG: a consistent ranking-based framework for 
-   segmentation. Journal of Machine Learning Research, 24(224), 1-50.
+   .. [1] Dai, B., & Li, C. (2023). RankSEG: a consistent ranking-based framework for 
+          segmentation. Journal of Machine Learning Research, 24(224), 1-50.
 
 
-.. py:function:: rankseg_rma(probs: torch.Tensor, metric: str = 'dice', return_binary_masks: bool = False, smooth: float = 0.0, pruning_prob: float = 0.1) -> torch.Tensor
+.. py:function:: rankseg_rma(probs: torch.Tensor, metric: str = 'dice', smooth: float = 0.0, output_mode: str = 'multiclass', pruning_prob: float = 0.5) -> torch.Tensor
 
    Produce the predicted segmentation by `rankdice` based on the estimated output probability.
 
@@ -207,10 +207,10 @@ Package Contents
    metric : str, default='dice'
        The metric aim to optimize, either 'iou' or 'dice'.
 
-   return_binary_masks : bool, default=False
-       Whether to return or allow binary masks per class (multi-label segmentation).
-       If False, performs multi-class segmentation where each pixel belongs to exactly one class.
-       If True, performs multi-label segmentation where pixels can belong to multiple classes.
+   output_mode : {'multiclass', 'multilabel'}, default='multiclass'
+       Controls overlap behavior of the predictions.
+       - 'multiclass': non-overlapping; each pixel belongs to exactly one class.
+       - 'multilabel': overlapping; pixels can belong to multiple classes (binary mask per class).
 
    smooth : float, default=0.0
        A smooth parameter in the Dice metric.
@@ -222,11 +222,11 @@ Package Contents
    Returns
    -------
    preds : Tensor
-       Shape (batch_size, num_class, \*image_shape) if return_binary_masks is True,
+       Shape (batch_size, num_class, \*image_shape) if output_mode == 'multilabel',
        otherwise shape (batch_size, \*image_shape)
 
 
-.. py:class:: RankSEG(metric: str = 'dice', smooth: float = 0.0, return_binary_masks: bool = False, solver: str = 'RMA', pruning_prob: float = 0.5, **solver_params)
+.. py:class:: RankSEG(metric: str = 'dice', smooth: float = 0.0, output_mode: str = 'multiclass', solver: str = 'RMA', pruning_prob: float = 0.5, **solver_params)
 
    Bases: :py:obj:`object`
 
@@ -241,19 +241,18 @@ Package Contents
    metric : str, default='dice'
        The segmentation metric to optimize. Currently supported:
        
-       - 'dice': Dice coefficient (F1 score)
-       - 'IoU': Intersection over Union (not yet implemented)
-       - 'AP': Average Precision (not yet implemented)
+       - 'dice': Dice coefficient
+       - 'IoU': Intersection over Union
+       - 'Acc': Accuracy 
 
    smooth : float, default=0.0
        Smoothing parameter added to numerator and denominator to avoid
        division by zero and improve numerical stability.
 
-   return_binary_masks : bool, default=False
-       Whether to return or allow binary masks per class (multi-label segmentation). 
-       Generally, this is only meaningful when segmentation datasets contain multiple labels.
-       If False, performs multi-class segmentation where each pixel belongs to exactly one class.
-       If True, performs multi-label segmentation where pixels can belong to multiple classes.
+   output_mode : {'multiclass', 'multilabel'}, default='multiclass'
+       Controls whether predictions are non-overlapping or overlapping.
+       - 'multiclass': non-overlapping; each pixel belongs to exactly one class.
+       - 'multilabel': overlapping; pixels can belong to multiple classes (binary mask per class).
 
    solver : str, default='RMA'
        The optimization solver to use. Options:
@@ -270,9 +269,10 @@ Package Contents
          
          - 'RMA': Reciprocal moment approximation
          
-       - When metric is 'AP':
+       - When metric is 'Acc':
          
-         - simply taking argmax or truncation (at 0.5) over classes
+         - 'argmax': argmax solver
+         - 'TR': truncation solver
 
    pruning_prob : float, default=0.5
        Probability threshold for pruning. Classes with maximum probability

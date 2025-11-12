@@ -16,14 +16,22 @@ labels_oh = labels_oh.permute(0, -1, 1, 2)[:, :-1]
 num_batch, num_class, *image_shape = probs.shape
 
 
-rankseg_ba_obj = RankSEG(metric='dice', solver='BA')
+rankseg_ba_obj = RankSEG(metric='dice', solver='BA', output_mode='multilabel')
 preds = rankseg_ba_obj.predict(probs)
-rankseg_rma_obj = RankSEG(metric='dice', solver='RMA', return_binary_masks=True)
+
+rankseg_rma_obj = RankSEG(metric='dice', solver='RMA', output_mode='multilabel')
 preds_rma_overlap = rankseg_rma_obj.predict(probs)
-rankseg_rma_obj = RankSEG(metric='dice', solver='RMA', return_binary_masks=False)
+
+rankseg_rma_obj = RankSEG(metric='dice', solver='RMA', output_mode='multiclass')
 preds_rma = rankseg_rma_obj.predict(probs)
 preds_rma = F.one_hot(preds_rma, num_classes=-1)
 preds_rma = preds_rma.permute(0, -1, 1, 2)
+
+rankseg_acc = RankSEG(metric='acc', solver='argmax', output_mode='multiclass')
+preds_acc = rankseg_acc.predict(probs)
+
+rankseg_acc = RankSEG(metric='acc', solver='truncation', output_mode='multilabel')
+preds_acc = rankseg_acc.predict(probs)
 
 
 dice_ba = dice_score(preds, labels_oh, num_classes=num_class, average='none').nanmean(dim=0)
