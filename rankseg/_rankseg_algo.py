@@ -3,7 +3,7 @@
 
 import torch
 import torch.nn.functional as F
-from rankseg._distribution import RefinedNormalPB
+from rankseg.distribution import RefinedNormalPB
 
 def rankdice_ba(probs: torch.Tensor, 
                    solver: str='BA', 
@@ -41,7 +41,7 @@ def rankdice_ba(probs: torch.Tensor,
 
     Returns
     -------
-    predict : Tensor, shape (batch_size, num_class, \*image_shape)
+    preds : Tensor, shape (batch_size, num_class, \*image_shape)
         The predicted segmentation based on `rankdice`.
 
     References

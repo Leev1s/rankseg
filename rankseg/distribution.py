@@ -11,8 +11,6 @@ from torch.distributions.normal import Normal
 from torch.distributions.utils import broadcast_all
 
 
-## example: https://pytorch-forecasting.readthedocs.io/en/v0.8.3/_modules/torch/distributions/negative_binomial.html
-
 class RefinedNormalPB(Distribution):
     r"""
     Refined Normal distribution to approximate Poisson binomial distribution.

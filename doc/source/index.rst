@@ -6,9 +6,9 @@
 🧩 RankSEG
 ==========
 
-.. image:: _static/logo.png
-   :width: 28%
-   :align: right
+.. .. image:: _static/logo.png
+..    :width: 28%
+..    :align: right
 
 .. -*- mode: rst -*-
 
@@ -185,7 +185,7 @@ Learn More
       Learn how to use RankSEG with your segmentation models
 
    .. grid-item-card:: 📚 API Reference
-      :link: autoapi/rankseg/index
+      :link: API
       :link-type: doc
 
       Detailed documentation of all classes and functions
@@ -209,3 +209,5 @@ Learn More
    getting_started
    metrics
    citation
+   API
+

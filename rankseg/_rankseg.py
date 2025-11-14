@@ -2,14 +2,14 @@
 # License: BSD 3 clause
 
 import torch
-from rankseg import rankdice_ba, rankseg_rma
+from rankseg._rankseg_algo import rankdice_ba, rankseg_rma
 import warnings
 
 class RankSEG(object):
-    """Rank-based Segmentation for optimizing segmentation metrics.
+    """RankSEG segmentation prediction module for optimizing segmentation metrics.
     
-    This class provides methods to convert probability maps into binary segmentation
-    predictions by optimizing ranking-based metrics like AP, Dice, IoU segmentation metrics.
+    This class provides methods to convert probability maps into segmentation
+    predictions by optimizing segmentation metrics like AP, Dice, IoU, and Accuracy.
     
     Parameters
     ----------

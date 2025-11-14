@@ -47,9 +47,9 @@ sys.path.insert(0, os.path.abspath('../rankseg'))
 # ones.
 master_doc = 'index'
 extensions = [
-	# 'sphinx.ext.autodoc',
+	'sphinx.ext.autodoc',
     'autoapi.extension',
-    # "sphinx.ext.linkcode",
+    "sphinx.ext.linkcode",
     "sphinx.ext.intersphinx",
     "sphinx_autodoc_typehints",
     # 'sphinx.ext.autosummary',
@@ -64,11 +64,12 @@ ENABLE_PLAUSIBLE = os.environ.get("READTHEDOCS_VERSION_TYPE", "") in ["branch", 
 html_context = {"enable_plausible": ENABLE_PLAUSIBLE}
 
 # -- autoapi configuration ---------------------------------------------------
-autodoc_typehints = "signature"  # autoapi respects this
-
+autodoc_typehints = "signature"
 autoapi_type = "python"
 autoapi_dirs = ['../../rankseg/']
 autoapi_template_dir = "_templates/autoapi"
+autoapi_root = "autoapi/rankseg/rankseg"
+autoapi_add_toctree_entry = False
 autoapi_options = [
     "members",
     "undoc-members",
@@ -76,7 +77,7 @@ autoapi_options = [
     "show-module-summary",
     "imported-members",
 ]
-autoapi_keep_files = True
+autoapi_keep_files = False
 
 
 # -- custom auto_summary() macro ---------------------------------------------
@@ -154,6 +155,25 @@ html_static_path = ['_static']
 #     'css/custom.css',
 # ]
 
+# -- linkcode configuration --------------------------------------------------
+def linkcode_resolve(domain, info):
+    """
+    Determine the URL corresponding to Python object.
+    
+    This function is used by sphinx.ext.linkcode to generate links to source code.
+    Currently returns None (no links). Update with your GitHub repository URL.
+    
+    Example implementation:
+    if domain != 'py':
+        return None
+    if not info['module']:
+        return None
+    
+    filename = info['module'].replace('.', '/')
+    return f"https://github.com/USERNAME/rankseg/blob/main/{filename}.py"
+    """
+    return None
+
 def autoapi_skip_members(app, what, name, obj, skip, options):
     if what == "attribute":
         skip = True
@@ -161,4 +181,3 @@ def autoapi_skip_members(app, what, name, obj, skip, options):
 
 def setup(sphinx):
     sphinx.connect("autoapi-skip-member", autoapi_skip_members)
-
