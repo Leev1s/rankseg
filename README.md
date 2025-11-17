@@ -2,7 +2,7 @@
 
 # 🧩 RankSEG
 
-## A statistically consistent ⚡ and plug-and-play 🔌 framework for semantic segmentation
+### RankSEG: A Statistically Consistent Segmentation Prediction Module <br> for Dice and IoU Metrics Optimization
 
 [![PyPI](https://badge.fury.io/py/rankseg.svg)](https://pypi.org/project/rankseg/)
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
