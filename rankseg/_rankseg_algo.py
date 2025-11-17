@@ -342,4 +342,4 @@ def rankseg_rma(
                 )
         preds = nonoverlap_preds.reshape(batch_size, *image_shape)
 
-    return preds.type(torch.LongTensor)
+    return preds.long()

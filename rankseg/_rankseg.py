@@ -71,11 +71,11 @@ class RankSEG(object):
     >>> from rankseg import RankSEG
     >>> 
     >>> # Create segmentation model
-    >>> rankseg = RankSEG(metric='dice', solver='BA', pruning_prob=0.5, eps=1e-4)
+    >>> rankseg = RankSEG(metric='dice', output_mode='multilabel', solver='BA', pruning_prob=0.5, eps=1e-4)
     >>> 
     >>> # Generate predictions from probability maps
-    >>> probs = torch.rand(4, 21, 256, 256)  # (batch, classes, height, width)
-    >>> preds = rankseg.predict(probs)
+    >>> probs = torch.softmax(torch.rand(4, 21, 256, 256), dim=1)  # (batch, classes, height, width)
+    >>> preds = rankseg.predict(probs)                             # (batch, classes, height, width)
     """
     def __init__(self,
                  metric: str='dice',
