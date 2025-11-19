@@ -42,6 +42,8 @@ Properties
 
 .. note::
 
+   Since the PASCAL VOC 2008 Challenge [3]_, Dice and IoU metrics have typically been computed at **per-dataset** level. However, this approach aggregates the confusion matrix across all images, causing large objects (with more pixels) to dominate the results over smaller objects [2]_. Therefore, we believe using **per-image** level metrics is more appropriate for evaluating segmentation.
+   
    Dice and IoU metrics optimized in ``rankseg`` follows a **samplewise aggregation** strategy, which matches the aggregation level used in TorchMetrics [1]_ (``aggregation_level='samplewise'``). The per-image level Dice and IoU are denoted as :math:`\text{Dice}_c^C` and :math:`\text{IoU}_c^C` in [2]_. 
    
    Moreover, for aggregation over multiple classes, ``rankseg`` supports optimization of both :math:`(\text{mDice}^I, \text{mIoU}^I)` and  :math:`(\text{mDice}^C, \text{mIoU}^C)` in [2]_, see definitions (4)-(8) in [2]_.
@@ -52,3 +54,5 @@ References
 .. [1] `torchmetrics.segmentation.DiceScore <https://lightning.ai/docs/torchmetrics/stable/segmentation/dice.html>`_
 
 .. [2] Wang, Zifu, etal. "Revisiting evaluation metrics for semantic segmentation: Optimization and evaluation of fine-grained intersection over union." *Advances in Neural Information Processing Systems* 36 (2023): 60144-60225. `paper link <https://arxiv.org/pdf/2310.19252>`__
+
+.. [3] Everingham, Mark, et al. "The pascal visual object classes challenge: A retrospective." *International Journal of Computer Vision* 111.1 (2015): 98-136.
