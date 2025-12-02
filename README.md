@@ -16,9 +16,11 @@
 
 </div>
 
-**RankSEG** is a statistically consistent framework for semantic segmentation that provides **plug-and-play** modules to improve segmentation results during inference. It works with **ANY pre-trained segmentation model** without retraining.
+**RankSEG** is a new framework for semantic segmentation that provides **plug-and-play** modules to improve segmentation results during inference. It works with **ANY pre-trained segmentation model** without retraining.
 
-RankSEG-based methods are theoretically-grounded segmentation approaches that are **statistically consistent** with respect to popular segmentation metrics like **Dice** and **IoU**. They provide *almost guaranteed* improved performance over traditional thresholding or argmax segmentation methods.
+![image](./fig/demo.png)
+
+RankSEG makes your segmentation model better at prediction time. Instead of using simple thresholding or argmax (which don't care about Dice/IoU scores), RankSEG directly optimizes for these metrics - giving you better results without any extra training.
 
 
 Explore RankSEG by reading our [documentation](https://rankseg.readthedocs.io/en/latest/).
