@@ -104,6 +104,20 @@ If you use RankSEG in your research, please cite our papers:
 }
 ```
 
+## Reproducing Paper Results
+
+To reproduce the experimental results from our publications, we provide dedicated repositories with complete code, datasets, and configurations:
+
+> [![JMLR](https://img.shields.io/badge/JMLR-v24|22.0712-black.svg)](https://www.jmlr.org/papers/v24/22-0712.html)
+>
+> **Repository:** [statmlben/rankseg](https://github.com/statmlben/rankseg)  
+
+> [![NeurIPS](https://img.shields.io/badge/NeurIPS-2025-black.svg)](https://openreview.net/pdf?id=4tRMm1JJhw)
+>
+> **Repository:** [ZixunWang/RankSEG-RMA](https://github.com/ZixunWang/RankSEG-RMA)  
+
+Each repository includes detailed instructions for setting up the environment, downloading datasets, and running the experiments.
+
 ## Useful Links
 
 - **Documentation**: https://rankseg.readthedocs.io/en/latest/
