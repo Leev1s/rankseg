@@ -38,7 +38,7 @@ Here's how to use RankSEG to make segmentation predictions that target the Dice/
     from rankseg import RankSEG
     ## input: `images` (batch_size, num_channels, *image_shape) is the input image tensor
     ## output: `preds` (batch_size, *image_shape) is the output binary mask tensor
-    
+
     # Load your trained segmentation model
     model = torch.load('trained_model.pth')
     model.eval()
@@ -56,7 +56,7 @@ The above code handles **99% of semantic segmentation use cases** where we have 
 
 **Key Benefits:**
 
-- ✅ **No retraining required** - Works with any pre-trained logit/prob-outcome segmentation model
+- ✅ **No retraining required** - Works with any pre-trained prob-outcome segmentation model
 - ✅ **Metric-aware** - Directly optimizes for your target metric (Dice, IoU, or Accuracy)
 - ✅ **Statistically consistent** - Theoretically guaranteed to improve performance
 - ✅ **Easy integration** - Just 2 lines of code to add to your inference pipeline
@@ -101,7 +101,7 @@ For these cases, see the examples below organized by probability type and desire
               ## `probs` (batch_size, num_classes, *image_shape) is the model output probability tensor
               logits = model(images)
               probs = F.softmax(logits, dim=1)
-              
+
               # Make segmentation prediction target the Dice metric
               ## you can also use `IoU` or `Acc` as the target metric
               rankseg = RankSEG(metric='dice', output_mode='multiclass')
@@ -125,7 +125,7 @@ For these cases, see the examples below organized by probability type and desire
               ## `probs` (batch_size, num_classes, *image_shape) is the model output probability tensor
               logits = model(images)
               probs = F.softmax(logits, dim=1)
-              
+
               # Make segmentation prediction target the Dice metric
               rankseg = RankSEG(metric='dice', output_mode='multilabel')
               preds = rankseg.predict(probs)  # (batch, num_classes, *image_shape)
@@ -154,7 +154,7 @@ For these cases, see the examples below organized by probability type and desire
               ## `probs` (batch_size, num_classes, *image_shape) is the model output probability tensor
               logits = model(images)
               probs = F.sigmoid(logits)
-              
+
               # Make segmentation prediction target the Dice metric
               ## you can also use `IoU` or `Acc` as the target metric
               rankseg = RankSEG(metric='dice', output_mode='multilabel')
@@ -179,7 +179,7 @@ For these cases, see the examples below organized by probability type and desire
               ## `probs` (batch_size, num_classes=1, *image_shape) is the model output probability tensor
               logits = model(images)
               probs = F.sigmoid(logits)
-              
+
               # Make segmentation prediction target the Dice metric
               ## you can also use `IoU` or `Acc` as the target metric
               rankseg = RankSEG(metric='dice', output_mode='multiclass')
@@ -198,12 +198,12 @@ Output Mode: Overlapping vs Non-overlapping
 RankSEG can produce either overlapping (multilabel) or non-overlapping (multiclass) masks via ``output_mode``, regardless of the input ``probs`` mode:
 
 - **Non-overlapping (multiclass)**: Set ``output_mode='multiclass'``. Each pixel belongs to exactly one class.
-  
+
   - Output shape: ``(batch, *image_shape)``
   - Use for: Standard semantic segmentation where classes are mutually exclusive
 
 - **Overlapping (multilabel)**: Set ``output_mode='multilabel'``. Pixels may belong to multiple classes.
-  
+
   - Output shape: ``(batch, num_classes, *image_shape)``
   - Use for: Instance segmentation, medical imaging, or when objects can overlap
 
@@ -349,7 +349,7 @@ A: Yes! For binary segmentation, set your ``probs`` shape to ``(batch, 1, *image
 
 **Q: Does RankSEG require retraining my model?**
 
-A: No! RankSEG is a post-processing method that works with any pre-trained logit/prob-outcome segmentation model. Simply apply it to your model's probability outputs during inference.
+A: No! RankSEG is a post-processing method that works with any pre-trained prob-outcome segmentation model. Simply apply it to your model's probability outputs during inference.
 
 ----
 

@@ -60,7 +60,7 @@ Key Properties
     * - **🎯 Metric-Optimized**
       - Directly optimizes for Dice or IoU metrics instead of using generic ad-hoc `argmax` during inference.
     * - **🔌 Plug-and-Play**
-      - Works with ANY pre-trained logit/prob-outcome segmentation model without retraining
+      - Works with ANY pre-trained prob-outcome segmentation model without retraining
     * - **⚡ Efficient Solvers**
       - Multiple solver options (BA, TRNA, RMA) for different speed-accuracy trade-offs
     * - **🧩 Flexible Tasks**
@@ -88,7 +88,7 @@ Basic usage example:
 
    # Create RankSEG predictor optimized for Dice metric
    rankseg = RankSEG(metric='dice')
-   
+
    # Get optimized predictions
    preds = rankseg.predict(probs)
 
@@ -198,7 +198,7 @@ Learn More
 
    .. grid-item-card:: 💻 GitHub
       :link: https://github.com/rankseg/rankseg
-      
+
       Source code, issues, and contributions
 
 References
@@ -213,4 +213,3 @@ References
    metrics
    citation
    API
-
