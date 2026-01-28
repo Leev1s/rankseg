@@ -114,15 +114,13 @@ RankSEG 开箱即用，支持任何基于 PyTorch 的分割框架。
 
 ---
 
-## 📚 文档与资源
-
-- **完整文档**: [rankseg.readthedocs.io](https://rankseg.readthedocs.io/en/latest/)
-- **JMLR 论文**: [RankSEG: A Consistent Ranking-based Framework for Segmentation](https://www.jmlr.org/papers/v24/22-0712.html)
-- **NeurIPS 论文**: [RankSEG-RMA: An Efficient Segmentation Algorithm via Reciprocal Moment Approximation](https://openreview.net/pdf?id=4tRMm1JJhw)
-
 ## 🔗 引用
 
 如果您在研究中使用了 RankSEG，请引用我们的论文：
+
+- Dai, B., & Li, C. (2023). RankSEG: A Consistent Ranking-based Framework for Segmentation. *Journal of Machine Learning Research*, **24**(224), 1-50. [[link]](https://www.jmlr.org/papers/v24/22-0712.html)
+- Wang, Z., & Dai, B. (2025). RankSEG-RMA: An Efficient Segmentation Algorithm via Reciprocal Moment Approximation. *Advances in Neural Information Processing Systems (NeurIPS 2025)*. [[link]](https://openreview.net/pdf?id=4tRMm1JJhw)
+
 
 ```bibtex
 @article{dai2023rankseg,
@@ -132,6 +130,7 @@ RankSEG 开箱即用，支持任何基于 PyTorch 的分割框架。
   volume={24},
   number={224},
   pages={1--50},
+  url={https://www.jmlr.org/papers/v24/22-0712.html},
   year={2023}
 }
 
@@ -139,6 +138,7 @@ RankSEG 开箱即用，支持任何基于 PyTorch 的分割框架。
   title={RankSEG-RMA: An Efficient Segmentation Algorithm via Reciprocal Moment Approximation},
   author={Wang, Zixun and Dai, Ben},
   booktitle={Advances in Neural Information Processing Systems},
+  url={https://arxiv.org/abs/2510.15362},
   year={2025}
 }
 ```

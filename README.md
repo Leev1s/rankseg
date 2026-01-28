@@ -93,7 +93,6 @@ Standard segmentation methods use `argmax` or thresholding, which are **not opti
 | UPerNet (ConvNeXt) | Cityscapes | 68.83% | **69.57%** ↑0.74% | 76.08% | **76.97%** ↑0.89% |
 | SegFormer (MiT-B4) | ADE20K | 40.00% | **40.82%** ↑0.82% | 46.50% | **47.57%** ↑1.07% |
 | UPerNet (ConvNeXt) | ADE20K | 42.86% | **43.84%** ↑0.98% | 49.61% | **50.85%** ↑1.24% |
-| CPT (Swin-Large) | ADE20K | 44.59% | **45.56%** ↑0.97% | 51.27% | **52.58%** ↑1.31% |
 
 *Results from our [NeurIPS 2025 paper](https://openreview.net/forum?id=4tRMm1JJhw).*
 
@@ -112,17 +111,14 @@ RankSEG works out-of-the-box with any PyTorch-based segmentation framework.
 
 > **Note**: Don't see your favorite framework? Open an [issue](https://github.com/rankseg/rankseg/issues) or submit a PR!
 
----
-
-## 📚 Documentation & Resources
-
-- **Full Documentation**: [rankseg.readthedocs.io](https://rankseg.readthedocs.io/en/latest/)
-- **JMLR Paper**: [RankSEG: A Consistent Ranking-based Framework for Segmentation](https://www.jmlr.org/papers/v24/22-0712.html)
-- **NeurIPS Paper**: [RankSEG-RMA: An Efficient Segmentation Algorithm via Reciprocal Moment Approximation](https://openreview.net/pdf?id=4tRMm1JJhw)
 
 ## 🔗 Citation
 
 If you use RankSEG in your research, please cite our papers:
+
+- Dai, B., & Li, C. (2023). RankSEG: A Consistent Ranking-based Framework for Segmentation. *Journal of Machine Learning Research*, **24**(224), 1-50. [[link]](https://www.jmlr.org/papers/v24/22-0712.html)
+- Wang, Z., & Dai, B. (2025). RankSEG-RMA: An Efficient Segmentation Algorithm via Reciprocal Moment Approximation. *Advances in Neural Information Processing Systems (NeurIPS 2025)*. [[link]](https://openreview.net/pdf?id=4tRMm1JJhw)
+
 
 ```bibtex
 @article{dai2023rankseg,
@@ -132,6 +128,7 @@ If you use RankSEG in your research, please cite our papers:
   volume={24},
   number={224},
   pages={1--50},
+  url={https://www.jmlr.org/papers/v24/22-0712.html},
   year={2023}
 }
 
@@ -139,6 +136,7 @@ If you use RankSEG in your research, please cite our papers:
   title={RankSEG-RMA: An Efficient Segmentation Algorithm via Reciprocal Moment Approximation},
   author={Wang, Zixun and Dai, Ben},
   booktitle={Advances in Neural Information Processing Systems},
+  url={https://arxiv.org/abs/2510.15362},
   year={2025}
 }
 ```
