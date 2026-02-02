@@ -281,26 +281,33 @@ def rankseg_rma(
             smooth: float,
             pruning_prob: float,
         ) -> torch.Tensor:
-        num_class = overlap_preds.size(0)
-        nonoverlap_predict = torch.zeros_like(overlap_preds[0], dtype=torch.uint8)
-        assert num_class <= 256, 'num_class should be less than 256, when using uint8'
-        overlap_mask = overlap_preds.sum(0) > 1
-        increment_score = torch.zeros_like(probs, dtype=torch.float32)
-        for c in range(num_class):
-            if sorted_prob[c][0] <= pruning_prob:
-                continue
-            safe_to_predict = overlap_preds[c] & ~overlap_mask
-            nonoverlap_predict[safe_to_predict] = c
-            mu = probs[c][safe_to_predict].sum()
-            opt_tau_this_c = safe_to_predict.sum()
-            if metric == 'dice':
-                increment_score[c] = 2 * ((mu + probs[c]) / (opt_tau_this_c + pb_mean[c] + 2 + smooth) - mu / (opt_tau_this_c + pb_mean[c] + 1 + smooth))
-                increment_score[c] += smooth * (1 / (opt_tau_this_c + pb_mean[c] + 1 + smooth) - 1 / (opt_tau_this_c + pb_mean[c] + smooth))
-            else:
-                increment_score[c] = (mu + probs[c] + smooth) / (opt_tau_this_c + pb_mean[c] - mu - probs[c] + 1 + smooth) - (mu + smooth) / (opt_tau_this_c + pb_mean[c] - mu)
-        increment_argmax_mask = increment_score.argmax(0)
-        nonoverlap_predict[overlap_mask] = increment_argmax_mask[overlap_mask].type(torch.uint8)
-        return nonoverlap_predict
+        batch_size, num_classes, dim = probs.size()
+
+        class_counts = overlap_preds.sum(dim=1)
+        single_pred_mask = (class_counts == 1)
+        overlap_mask = class_counts > 1
+        safe_to_predict = overlap_preds & ~overlap_mask.unsqueeze(1)
+
+        mu = (probs * safe_to_predict.float()).sum(dim=2, keepdim=True)
+        opt_tau = safe_to_predict.float().sum(dim=2, keepdim=True)
+
+        active_mask = sorted_prob[:, :, 0] > pruning_prob
+
+        if metric == 'dice':
+            denom = opt_tau + pb_mean.unsqueeze(2) + 1 + smooth
+            increment_scores = 2 * ((mu + probs + smooth) / (denom + 1) - (mu + smooth) / denom)
+        else:
+            denom = opt_tau + pb_mean.unsqueeze(2) - mu + smooth
+            increment_scores = (mu + probs + smooth) / (denom - probs + 1) - (mu + smooth) / denom
+
+        increment_scores = torch.where(active_mask.unsqueeze(2), increment_scores, torch.full_like(increment_scores, float('-inf')))
+
+        increment_argmax_mask = increment_scores.argmax(dim=1)
+        nonoverlap_predicts = torch.zeros((batch_size, dim), dtype=torch.int16, device=device)
+        nonoverlap_predicts[single_pred_mask] = overlap_preds.to(torch.int16).argmax(dim=1).to(torch.int16)[single_pred_mask]
+        nonoverlap_predicts[overlap_mask] = increment_argmax_mask[overlap_mask].to(torch.int16)
+
+        return nonoverlap_predicts
 
     return_binary_masks = (output_mode == 'multilabel')
     is_binary = (probs.shape[1] == 2) and not return_binary_masks
@@ -333,17 +340,15 @@ def rankseg_rma(
         if is_binary:
             nonoverlap_preds = overlap_preds[:, 0, ...].long()
         else:
-            nonoverlap_preds = torch.zeros(batch_size, dim, dtype=torch.uint8, device=device)
-            for b in range(batch_size):
-                nonoverlap_preds[b] = convert_to_nonoverlap(
-                    overlap_preds[b],
-                    probs=probs[b],
-                    metric=metric,
-                    sorted_prob=sorted_prob[b],
-                    pb_mean=pb_mean[b],
-                    smooth=smooth,
-                    pruning_prob=pruning_prob,
-                )
+            nonoverlap_preds = convert_to_nonoverlap(
+                overlap_preds,
+                probs,
+                metric,
+                sorted_prob,
+                pb_mean,
+                smooth,
+                pruning_prob,
+            )
         preds = nonoverlap_preds.reshape(batch_size, *image_shape)
 
     return preds.long()
