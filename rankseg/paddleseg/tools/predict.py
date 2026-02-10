@@ -17,7 +17,7 @@ import os
 
 import paddle
 
-from rankseg.compatibility.paddleseg.core.predict import predict
+from rankseg.paddleseg.predict import predict
 from paddleseg.cvlibs import Config, SegBuilder, manager
 from paddleseg.transforms import Compose
 from paddleseg.utils import get_image_list, get_sys_env, logger, utils
@@ -194,3 +194,4 @@ def main(args):
 if __name__ == '__main__':
     args = parse_args()
     main(args)
+

@@ -20,7 +20,7 @@ import numpy as np
 import paddle
 
 from paddleseg import utils
-from rankseg.compatibility.paddleseg.core import infer
+from rankseg.paddleseg import infer
 from paddleseg.utils import logger, progbar, visualize
 
 

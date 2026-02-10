@@ -17,7 +17,10 @@ setup(
     description="RankSEG: A Statistically Consistent Segmentation Prediction Solver for Dice and IoU Metrics Optimization",
     long_description=long_description,
     long_description_content_type='text/markdown',
-    packages=["rankseg"],
+    packages=[
+        "rankseg",
+        "rankseg.paddleseg",
+    ],
     install_requires=["torch", "scipy", "numpy"],
     zip_safe=False,
     python_requires=">= 3.9",
