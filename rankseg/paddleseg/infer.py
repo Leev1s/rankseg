@@ -20,6 +20,7 @@ import cv2
 import paddle
 import paddle.nn.functional as F
 from skimage import measure, morphology
+from paddleseg.utils import logger
 
 
 def _generate_pred_from_logit(logit,
@@ -71,6 +72,11 @@ def _generate_pred_from_logit(logit,
         probs = torch.softmax(logit_torch, dim=1)
 
         # 3. RankSEG optimization
+        rankseg_config = f"metric={rankseg_metric}, solver={rankseg_solver}, output_mode={rankseg_output_mode}"
+        if rankseg_kwargs:
+            rankseg_config += f", {rankseg_kwargs}"
+        logger.info(f"RankSEG Configuration: {rankseg_config}")
+        
         rankseg = RankSEG(
             metric=rankseg_metric,
             solver=rankseg_solver,
