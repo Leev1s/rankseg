@@ -1,4 +1,4 @@
-# Copyright (c) 2020 PaddlePaddle Authors. All Rights Reserved.
+# Copyright (c) 2023 PaddlePaddle Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,15 +13,18 @@
 # limitations under the License.
 
 import os
+import json
 import math
+from unittest import result
 
 import cv2
 import numpy as np
 import paddle
+from PIL import Image
 
 from paddleseg import utils
 from rankseg.paddleseg import infer
-from paddleseg.utils import logger, progbar, visualize
+from paddleseg.utils import logger, progbar, visualize, metrics
 
 
 def mkdir(path):
@@ -45,11 +48,10 @@ def preprocess(im_path, transforms):
     return data
 
 
-def predict(model,
+def analyse(model,
             model_path,
             transforms,
-            image_list,
-            image_dir=None,
+            val_dataset,
             save_dir='output',
             aug_pred=False,
             scales=1.0,
@@ -59,7 +61,6 @@ def predict(model,
             stride=None,
             crop_size=None,
             custom_color=None,
-            use_multilabel=False,
             use_rankseg=False,
             rankseg_metric='dice',
             rankseg_solver='RMA',
@@ -71,8 +72,7 @@ def predict(model,
         model (nn.Layer): Used to predict for input image.
         model_path (str): The path of pretrained model.
         transforms (transform.Compose): Preprocess for input image.
-        image_list (list): A list of image path to be predicted.
-        image_dir (str, optional): The root directory of the images predicted. Default: None.
+        val_dataset (paddle.io.Dataset): Used to read and process validation datasets.
         save_dir (str, optional): The directory to save the visualized results. Default: 'output'.
         aug_pred (bool, optional): Whether to use mulit-scales and flip augment for predition. Default: False.
         scales (list|float, optional): Scales for augment. It is valid when `aug_pred` is True. Default: 1.0.
@@ -81,44 +81,48 @@ def predict(model,
         is_slide (bool, optional): Whether to predict by sliding window. Default: False.
         stride (tuple|list, optional): The stride of sliding window, the first is width and the second is height.
             It should be provided when `is_slide` is True.
-        crop_size (tuple|list, optional):  The crop size of sliding window, the first is width and the second is height.
+        crop_size (tuple|list, optional): The crop size of sliding window, the first is width and the second is height.
             It should be provided when `is_slide` is True.
         custom_color (list, optional): Save images with a custom color map. Default: None, use paddleseg's default color map.
-        use_multilabel (bool, optional): Whether to enable multilabel mode. Default: False.
-        use_rankseg (bool, optional): Whether to use RankSEG for optimized segmentation prediction. Default: False.
-        rankseg_metric (str, optional): Metric to optimize when using RankSEG. Options: 'dice', 'IoU', 'Acc'. Default: 'dice'.
-        rankseg_solver (str, optional): Solver for RankSEG optimization. Options: 'RMA', 'BA', 'TRNA'. Default: 'RMA'.
-        rankseg_output_mode (str, optional): Output mode for RankSEG. Options: 'multiclass', 'multilabel'. Default: 'multiclass'.
+        use_rankseg (bool, optional): Whether to use RankSEG optimization. Default: False.
+        rankseg_metric (str, optional): RankSEG optimization metric. Default: 'dice'.
+        rankseg_solver (str, optional): RankSEG solver. Default: 'RMA'.
+        rankseg_output_mode (str, optional): RankSEG output mode. Default: 'multiclass'.
 
     """
     utils.utils.load_entire_model(model, model_path)
     model.eval()
+    file_list = val_dataset.file_list
+    dataset_root = val_dataset.dataset_root
     nranks = paddle.distributed.get_world_size()
     local_rank = paddle.distributed.get_rank()
     if nranks > 1:
-        img_lists = partition_list(image_list, nranks)
+        paddle.distributed.init_parallel_env()
+        file_list = partition_list(file_list, nranks)
     else:
-        img_lists = [image_list]
+        file_list = [file_list]
 
     added_saved_dir = os.path.join(save_dir, 'added_prediction')
     pred_saved_dir = os.path.join(save_dir, 'pseudo_color_prediction')
+    results = {}
 
     logger.info("Start to predict...")
-    progbar_pred = progbar.Progbar(target=len(img_lists[0]), verbose=1)
+    progbar_pred = progbar.Progbar(target=len(file_list[0]), verbose=1)
     color_map = visualize.get_color_map_list(256, custom_color=custom_color)
-    with paddle.no_grad():
-        for i, im_path in enumerate(img_lists[local_rank]):
-            data = preprocess(im_path, transforms)
 
-            # Prepare RankSEG parameters
-            rankseg_params = {}
-            if use_rankseg:
-                rankseg_params = {
-                    'use_rankseg': True,
-                    'rankseg_metric': rankseg_metric,
-                    'rankseg_solver': rankseg_solver,
-                    'rankseg_output_mode': rankseg_output_mode
-                }
+    # Prepare RankSEG parameters
+    rankseg_params = {}
+    if use_rankseg:
+        rankseg_params = {
+            'use_rankseg': True,
+            'rankseg_metric': rankseg_metric,
+            'rankseg_solver': rankseg_solver,
+            'rankseg_output_mode': rankseg_output_mode
+        }
+
+    with paddle.no_grad():
+        for i, (im_path, label_path) in enumerate(file_list[local_rank]):
+            data = preprocess(im_path, transforms)
 
             if aug_pred:
                 pred, _ = infer.aug_inference(
@@ -131,7 +135,6 @@ def predict(model,
                     is_slide=is_slide,
                     stride=stride,
                     crop_size=crop_size,
-                    use_multilabel=use_multilabel,
                     **rankseg_params)
             else:
                 pred, _ = infer.inference(
@@ -141,16 +144,26 @@ def predict(model,
                     is_slide=is_slide,
                     stride=stride,
                     crop_size=crop_size,
-                    use_multilabel=use_multilabel,
                     **rankseg_params)
-
-            # Unified post-processing
             pred = paddle.squeeze(pred)
-            pred = pred.numpy().astype('uint8')
 
+            # calculate miou for the image
+            label = paddle.to_tensor(
+                np.asarray(Image.open(label_path)), dtype=pred.dtype)
+            intersect_area, pred_area, label_area = metrics.calculate_area(
+                pred, label, val_dataset.num_classes)
+            class_iou_per_img, miou_per_img = metrics.mean_iou(
+                intersect_area, pred_area, label_area)
+            results[im_path] = {
+                'miou': miou_per_img,
+                'class_iou': list(class_iou_per_img),
+                'label_path': label_path
+            }
+
+            pred = pred.numpy().astype('uint8')
             # get the saved name
-            if image_dir is not None:
-                im_file = im_path.replace(image_dir, '')
+            if dataset_root is not None:
+                im_file = im_path.replace(dataset_root, '')
             else:
                 im_file = os.path.basename(im_path)
             if im_file[0] == '/' or im_file[0] == '\\':
@@ -158,20 +171,31 @@ def predict(model,
 
             # save added image
             added_image = utils.visualize.visualize(
-                im_path, pred, color_map, weight=0.6, use_multilabel=use_multilabel)
+                im_path, pred, color_map, weight=0.6)
             added_image_path = os.path.join(added_saved_dir, im_file)
             mkdir(added_image_path)
             cv2.imwrite(added_image_path, added_image)
+            results[im_path]['added_path'] = added_image_path
 
             # save pseudo color prediction
-            pred_mask = utils.visualize.get_pseudo_color_map(
-                pred, color_map, use_multilabel=use_multilabel)
+            pred_mask = utils.visualize.get_pseudo_color_map(pred, color_map)
             pred_saved_path = os.path.join(
                 pred_saved_dir, os.path.splitext(im_file)[0] + ".png")
             mkdir(pred_saved_path)
             pred_mask.save(pred_saved_path)
+            results[im_path]['prediction_path'] = pred_saved_path
 
             progbar_pred.update(i + 1)
+    if nranks > 1:
+        results_list = []
+        paddle.distributed.all_gather_object(results_list, results)
+        if local_rank == 0:
+            results = {}
+            for d in results_list:
+                results.update(d)
+    if local_rank == 0:
+        with open(os.path.join(save_dir, 'analysis_results.json'), 'w') as f:
+            json.dump(results, f, indent=4)
 
-    logger.info("Predicted images are saved in {} and {} .".format(
-        added_saved_dir, pred_saved_dir))
+    logger.info("Samples analysis finished, the results are save in {}.".format(
+        save_dir))

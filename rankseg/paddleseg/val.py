@@ -20,7 +20,7 @@ import paddle
 import paddle.nn.functional as F
 
 from paddleseg.utils import metrics, TimeAverager, calculate_eta, logger, progbar
-from paddleseg.core import infer
+from rankseg.paddleseg import infer
 
 np.set_printoptions(suppress=True)
 
@@ -39,7 +39,11 @@ def evaluate(model,
              num_workers=0,
              print_detail=True,
              auc_roc=False,
-             use_multilabel=False):
+             use_multilabel=False,
+             use_rankseg=False,
+             rankseg_metric='dice',
+             rankseg_solver='RMA',
+             rankseg_output_mode='multiclass'):
     """
     Launch evalution.
 
@@ -61,6 +65,10 @@ def evaluate(model,
         print_detail (bool, optional): Whether to print detailed information about the evaluation process. Default: True.
         auc_roc(bool, optional): whether add auc_roc metric
         use_multilabel (bool, optional): Whether to enable multilabel mode. Default: False.
+        use_rankseg (bool, optional): Whether to use RankSEG optimization. Default: False.
+        rankseg_metric (str, optional): RankSEG optimization metric. Default: 'dice'.
+        rankseg_solver (str, optional): RankSEG solver. Default: 'RMA'.
+        rankseg_output_mode (str, optional): RankSEG output mode. Default: 'multiclass'.
 
     Returns:
         float: The mIoU of validation datasets.
@@ -98,6 +106,17 @@ def evaluate(model,
     reader_cost_averager = TimeAverager()
     batch_cost_averager = TimeAverager()
     batch_start = time.time()
+
+    # Prepare RankSEG parameters
+    rankseg_params = {}
+    if use_rankseg:
+        rankseg_params = {
+            'use_rankseg': True,
+            'rankseg_metric': rankseg_metric,
+            'rankseg_solver': rankseg_solver,
+            'rankseg_output_mode': rankseg_output_mode
+        }
+
     with paddle.no_grad():
         for iter, data in enumerate(loader):
             reader_cost_averager.record(time.time() - batch_start)
@@ -123,7 +142,8 @@ def evaluate(model,
                             is_slide=is_slide,
                             stride=stride,
                             crop_size=crop_size,
-                            use_multilabel=use_multilabel)
+                            use_multilabel=use_multilabel,
+                            **rankseg_params)
                 else:
                     pred, logits = infer.aug_inference(
                         model,
@@ -135,7 +155,8 @@ def evaluate(model,
                         is_slide=is_slide,
                         stride=stride,
                         crop_size=crop_size,
-                        use_multilabel=use_multilabel)
+                        use_multilabel=use_multilabel,
+                        **rankseg_params)
             else:
                 if precision == 'fp16':
                     with paddle.amp.auto_cast(
@@ -153,7 +174,8 @@ def evaluate(model,
                             is_slide=is_slide,
                             stride=stride,
                             crop_size=crop_size,
-                            use_multilabel=use_multilabel)
+                            use_multilabel=use_multilabel,
+                            **rankseg_params)
                 else:
                     pred, logits = infer.inference(
                         model,
@@ -162,7 +184,8 @@ def evaluate(model,
                         is_slide=is_slide,
                         stride=stride,
                         crop_size=crop_size,
-                        use_multilabel=use_multilabel)
+                        use_multilabel=use_multilabel,
+                        **rankseg_params)
 
             intersect_area, pred_area, label_area = metrics.calculate_area(
                 pred,

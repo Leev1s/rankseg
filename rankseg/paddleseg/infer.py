@@ -22,6 +22,80 @@ import paddle.nn.functional as F
 from skimage import measure, morphology
 
 
+def _generate_pred_from_logit(logit,
+                               use_multilabel=False,
+                               use_rankseg=False,
+                               rankseg_metric='dice',
+                               rankseg_solver='RMA',
+                               rankseg_output_mode='multiclass',
+                               **rankseg_kwargs):
+    """
+    Generate prediction from logit.
+
+    Args:
+        logit (Tensor): Model output logit, shape (batch, num_classes, H, W).
+        use_multilabel (bool): Whether to use multilabel mode.
+        use_rankseg (bool): Whether to use RankSEG optimization.
+        rankseg_metric (str): RankSEG optimization metric ('dice', 'IoU', 'Acc').
+        rankseg_solver (str): RankSEG solver ('RMA', 'BA', 'TRNA', 'BA+TRNA').
+        rankseg_output_mode (str): RankSEG output mode ('multiclass', 'multilabel').
+        **rankseg_kwargs: Additional parameters for RankSEG (e.g., smooth, pruning_prob).
+
+    Returns:
+        Tensor: Prediction result.
+            - If use_rankseg=True and rankseg_output_mode='multiclass':
+              Shape (batch, 1, H, W), values are class indices.
+            - If use_rankseg=True and rankseg_output_mode='multilabel':
+              Shape (batch, num_classes, H, W), values are 0/1.
+            - If use_rankseg=False and use_multilabel=False:
+              Shape (batch, 1, H, W), values are class indices (argmax).
+            - If use_rankseg=False and use_multilabel=True:
+              Shape (batch, num_classes, H, W), values are 0/1 (sigmoid > 0.5).
+    """
+    if not use_rankseg:
+        # Original logic
+        if not use_multilabel:
+            pred = paddle.argmax(logit, axis=1, keepdim=True, dtype='int32')
+        else:
+            pred = (F.sigmoid(logit) > 0.5).astype('int32')
+    else:
+        # RankSEG optimization
+        import torch
+        from rankseg import RankSEG
+
+        # 1. Paddle Tensor -> NumPy -> PyTorch Tensor
+        logit_np = logit.numpy()
+        logit_torch = torch.from_numpy(logit_np)
+
+        # 2. Compute softmax probabilities
+        probs = torch.softmax(logit_torch, dim=1)
+
+        # 3. RankSEG optimization
+        rankseg = RankSEG(
+            metric=rankseg_metric,
+            solver=rankseg_solver,
+            output_mode=rankseg_output_mode,
+            **rankseg_kwargs
+        )
+        pred_torch = rankseg.predict(probs)
+
+        # 4. PyTorch Tensor -> NumPy -> Paddle Tensor
+        pred_np = pred_torch.cpu().numpy()
+
+        # 5. Handle output shape
+        if rankseg_output_mode == 'multiclass':
+            # RankSEG multiclass output: (batch, H, W)
+            # Convert to (batch, 1, H, W) for consistency
+            if pred_np.ndim == 3:
+                pred_np = pred_np[:, np.newaxis, :, :]
+            pred = paddle.to_tensor(pred_np, dtype='int32')
+        else:
+            # RankSEG multilabel output: (batch, num_classes, H, W)
+            pred = paddle.to_tensor(pred_np, dtype='int32')
+
+    return pred
+
+
 def reverse_transform(pred, trans_info, mode='nearest'):
     """recover pred to origin shape"""
     intTypeList = [paddle.int8, paddle.int16, paddle.int32, paddle.int64]
@@ -148,7 +222,12 @@ def inference(model,
               is_slide=False,
               stride=None,
               crop_size=None,
-              use_multilabel=False):
+              use_multilabel=False,
+              use_rankseg=False,
+              rankseg_metric='dice',
+              rankseg_solver='RMA',
+              rankseg_output_mode='multiclass',
+              **rankseg_kwargs):
     """
     Inference for image.
 
@@ -160,10 +239,16 @@ def inference(model,
         crop_size (tuple|list). The size of sliding window, (w, h). It should be probided if is_slide is True.
         stride (tuple|list). The size of stride, (w, h). It should be probided if is_slide is True.
         use_multilabel (bool, optional): Whether to enable multilabel mode. Default: False.
+        use_rankseg (bool, optional): Whether to use RankSEG optimization. Default: False.
+        rankseg_metric (str, optional): RankSEG optimization metric. Default: 'dice'.
+        rankseg_solver (str, optional): RankSEG solver. Default: 'RMA'.
+        rankseg_output_mode (str, optional): RankSEG output mode. Default: 'multiclass'.
+        **rankseg_kwargs: Additional parameters for RankSEG.
 
     Returns:
-        Tensor: If ori_shape is not None, a prediction with shape (1, 1, h, w) is returned.
-            If ori_shape is None, a logit with shape (1, num_classes, h, w) is returned.
+        Tensor: If trans_info is not None, a prediction with shape (1, 1, h, w) or (1, num_classes, h, w) is returned.
+        Tensor: logit with shape (1, num_classes, h, w) - used for metrics calculation in val.py.
+            If trans_info is None, only logit with shape (1, num_classes, h, w) is returned.
     """
     if hasattr(model, 'data_format') and model.data_format == 'NHWC':
         im = im.transpose((0, 2, 3, 1))
@@ -182,10 +267,18 @@ def inference(model,
         logit = stfpm_post_transform(logit)
     if trans_info is not None:
         logit = reverse_transform(logit, trans_info, mode='bilinear')
-        if not use_multilabel:
-            pred = paddle.argmax(logit, axis=1, keepdim=True, dtype='int32')
-        else:
-            pred = (F.sigmoid(logit) > 0.5).astype('int32')
+
+        # Generate prediction using helper function
+        pred = _generate_pred_from_logit(
+            logit,
+            use_multilabel=use_multilabel,
+            use_rankseg=use_rankseg,
+            rankseg_metric=rankseg_metric,
+            rankseg_solver=rankseg_solver,
+            rankseg_output_mode=rankseg_output_mode,
+            **rankseg_kwargs
+        )
+
         return pred, logit
     else:
         return logit
@@ -200,7 +293,12 @@ def aug_inference(model,
                   is_slide=False,
                   stride=None,
                   crop_size=None,
-                  use_multilabel=False):
+                  use_multilabel=False,
+                  use_rankseg=False,
+                  rankseg_metric='dice',
+                  rankseg_solver='RMA',
+                  rankseg_output_mode='multiclass',
+                  **rankseg_kwargs):
     """
     Infer with augmentation.
 
@@ -215,9 +313,15 @@ def aug_inference(model,
         crop_size (tuple|list). The size of sliding window, (w, h). It should be probided if is_slide is True.
         stride (tuple|list). The size of stride, (w, h). It should be probided if is_slide is True.
         use_multilabel (bool, optional): Whether to enable multilabel mode. Default: False.
+        use_rankseg (bool, optional): Whether to use RankSEG optimization. Default: False.
+        rankseg_metric (str, optional): RankSEG optimization metric. Default: 'dice'.
+        rankseg_solver (str, optional): RankSEG solver. Default: 'RMA'.
+        rankseg_output_mode (str, optional): RankSEG output mode. Default: 'multiclass'.
+        **rankseg_kwargs: Additional parameters for RankSEG.
 
     Returns:
-        Tensor: Prediction of image with shape (1, 1, h, w) is returned.
+        Tensor: Prediction of image with shape (1, 1, h, w) or (1, num_classes, h, w).
+        Tensor: logit with shape (1, num_classes, h, w).
     """
     if isinstance(scales, float):
         scales = [scales]
@@ -248,9 +352,16 @@ def aug_inference(model,
     # comparable to single-scale logits
     final_logit /= num_augs
     final_logit = reverse_transform(final_logit, trans_info, mode='bilinear')
-    if not use_multilabel:
-        pred = paddle.argmax(final_logit, axis=1, keepdim=True, dtype='int32')
-    else:
-        pred = (F.sigmoid(final_logit) > 0.5).astype('int32')
+
+    # Generate prediction using helper function
+    pred = _generate_pred_from_logit(
+        final_logit,
+        use_multilabel=use_multilabel,
+        use_rankseg=use_rankseg,
+        rankseg_metric=rankseg_metric,
+        rankseg_solver=rankseg_solver,
+        rankseg_output_mode=rankseg_output_mode,
+        **rankseg_kwargs
+    )
 
     return pred, final_logit
