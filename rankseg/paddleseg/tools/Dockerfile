@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y \
 # 2. Clone PaddleSeg to /tmp, install it, extract configs, then remove source
 # 3. Install rankseg
 # 4. Clean uv cache
-RUN uv pip install --system "numpy<2.0" "opencv-python-headless<5" \
+RUN uv pip install --system "numpy<2.0" \
     && uv pip install --system torch -i https://download.pytorch.org/whl/cpu \
     && uv pip install --system paddlepaddle==3.3.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/ \
     && git clone --depth 1 --single-branch --branch release/2.10 https://github.com/PaddlePaddle/PaddleSeg.git /tmp/paddleseg \
