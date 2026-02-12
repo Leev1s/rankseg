@@ -7,33 +7,35 @@ WORKDIR /workspace
 ENV UV_COMPILE_BYTECODE=1
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y \
     git \
     curl \
     tar \
     libgl1 \
     libglib2.0-0 \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install python dependencies
-RUN uv pip install --system paddlepaddle==3.3.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
-
-# Clone PaddleSeg (release/2.10)
-RUN git clone --depth 1 --single-branch --branch release/2.10 https://github.com/PaddlePaddle/PaddleSeg.git /opt/paddleseg
-
-# Install PaddleSeg package (non-editable)
-RUN uv pip install --system /opt/paddleseg
-
-# Copy PaddleSeg configs to workspace
-RUN cp -r /opt/paddleseg/configs /workspace/configs
-
-# Install rankseg from git since we are building from tools context
-RUN uv pip install --system git+https://github.com/Leev1s/rankseg.git@paddleseg
+# Combined steps to reduce image size:
+# 1. Install pip packages
+# 2. Clone PaddleSeg to /tmp, install it, extract configs, then remove source
+# 3. Install rankseg
+# 4. Clean uv cache
+RUN uv pip install --system "numpy<2.0" "opencv-python-headless<5" \
+    && uv pip install --system torch -i https://download.pytorch.org/whl/cpu \
+    && uv pip install --system paddlepaddle==3.3.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/ \
+    && git clone --depth 1 --single-branch --branch release/2.10 https://github.com/PaddlePaddle/PaddleSeg.git /tmp/paddleseg \
+    && uv pip install --system /tmp/paddleseg \
+    && cp -r /tmp/paddleseg/configs /workspace/configs \
+    && rm -rf /tmp/paddleseg \
+    && uv pip install --system git+https://github.com/Leev1s/rankseg.git@paddleseg \
+    && uv cache clean
 
 # Copy tools scripts (val.py, analyse.py, etc.)
 COPY . /workspace
 
-# Create 'download' command (keeps the complex curl/tar logic encapsulated)
+# Create 'download' command
 RUN echo '#!/bin/bash\n\
 set -e\n\
 echo "Downloading CamVid dataset..."\n\

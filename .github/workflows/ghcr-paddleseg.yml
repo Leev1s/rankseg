@@ -40,4 +40,6 @@ jobs:
           file: rankseg/paddleseg/tools/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:paddleseg-ppliteseg-camvid
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
