@@ -116,6 +116,8 @@ def evaluate(model,
             'rankseg_solver': rankseg_solver,
             'rankseg_output_mode': rankseg_output_mode
         }
+        if print_detail:
+            logger.info(f"RankSEG enabled: metric={rankseg_metric}, solver={rankseg_solver}, output_mode={rankseg_output_mode}")
 
     with paddle.no_grad():
         for iter, data in enumerate(loader):

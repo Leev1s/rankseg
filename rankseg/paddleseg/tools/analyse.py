@@ -177,6 +177,8 @@ def main(args):
 
     logger.info('The number of samples to analyse: {}'.format(
         len(val_dataset.file_list)))
+    if args.use_rankseg:
+        logger.info(f"RankSEG enabled: metric={args.rankseg_metric}, solver={args.rankseg_solver}, output_mode={args.rankseg_output_mode}")
 
     analyse(
         model,

@@ -119,6 +119,7 @@ def analyse(model,
             'rankseg_solver': rankseg_solver,
             'rankseg_output_mode': rankseg_output_mode
         }
+        logger.info(f"RankSEG enabled: metric={rankseg_metric}, solver={rankseg_solver}, output_mode={rankseg_output_mode}")
 
     with paddle.no_grad():
         for i, (im_path, label_path) in enumerate(file_list[local_rank]):

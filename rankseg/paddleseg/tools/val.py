@@ -182,6 +182,8 @@ def main(args):
         utils.load_entire_model(model, args.model_path)
         logger.info('Loaded trained weights successfully.')
     val_dataset = builder.val_dataset
+    if args.use_rankseg:
+        logger.info(f"RankSEG enabled: metric={args.rankseg_metric}, solver={args.rankseg_solver}, output_mode={args.rankseg_output_mode}")
 
     evaluate(model, val_dataset, num_workers=args.num_workers, **test_config)
 

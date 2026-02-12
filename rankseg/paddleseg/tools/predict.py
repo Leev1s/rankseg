@@ -180,6 +180,8 @@ def main(args):
     transforms = Compose(builder.val_transforms)
     image_list, image_dir = get_image_list(args.image_path)
     logger.info('The number of images: {}'.format(len(image_list)))
+    if args.use_rankseg:
+        logger.info(f"RankSEG enabled: metric={args.rankseg_metric}, solver={args.rankseg_solver}, output_mode={args.rankseg_output_mode}")
 
     predict(
         model,
