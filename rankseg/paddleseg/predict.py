@@ -104,8 +104,6 @@ def predict(model,
     pred_saved_dir = os.path.join(save_dir, 'pseudo_color_prediction')
 
     logger.info("Start to predict...")
-    if use_rankseg:
-        logger.info(f"RankSEG enabled: metric={rankseg_metric}, solver={rankseg_solver}, output_mode={rankseg_output_mode}")
     progbar_pred = progbar.Progbar(target=len(img_lists[0]), verbose=1)
     color_map = visualize.get_color_map_list(256, custom_color=custom_color)
     with paddle.no_grad():
