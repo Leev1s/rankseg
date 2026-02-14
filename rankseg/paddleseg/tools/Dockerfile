@@ -1,19 +1,6 @@
-##### Stage 1: Downloader
-# Use a lightweight git image to clone repositories
-FROM alpine/git AS downloader
-
-WORKDIR /tmp
-# Clone repository (depth 1 for speed and minimal size)
-RUN git clone --depth 1 --single-branch --branch release/2.10 https://github.com/PaddlePaddle/PaddleSeg.git /tmp/paddleseg
-
-# Clone rankseg repository
-RUN git clone --depth 1 --single-branch --branch paddleseg https://github.com/Leev1s/rankseg.git /tmp/rankseg
-
-# ------------------------------------------------------------------------------------------------
-
-##### Stage 2: Builder
+##### Stage 1: Builder
 # Use uv image for fast dependency installation
-FROM ghcr.io/astral-sh/uv:python3.10-trixie-slim AS builder
+FROM ghcr.io/astral-sh/uv:python3.10-bookworm-slim AS builder
 
 WORKDIR /build
 
@@ -22,34 +9,49 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
 # Install Python dependencies into virtual environment /build/.venv
+# Create virtual environment
+RUN uv venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# 1. Create virtual environment
-RUN uv venv /build/.venv
-
-# 2. Copy repositories
-COPY --from=downloader /tmp/paddleseg /build/paddleseg
-COPY --from=downloader /tmp/rankseg /build/rankseg
-
-# 3. Activate virtual environment
-ENV PATH="/build/.venv/bin:$PATH"
-
-# 4. Install dependencies
+# Install dependencies
 # Step-by-step installation to leverage caching
 # Install CPU versions of torch and paddle to save significant space
-# Install heavy dependencies first (cached layer)
-RUN uv pip install --no-cache "numpy<2.0" \
+RUN uv pip install --no-cache numpy==1.26.4 \
     && uv pip install --no-cache torch --index-url https://download.pytorch.org/whl/cpu \
     && uv pip install --no-cache paddlepaddle==3.3.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
-# Install git dependencies (frequently changing layer)
-RUN uv pip install --no-cache /build/paddleseg \
-    && uv pip install --no-cache /build/rankseg
+# ------------------------------------------------------------------------------------------------
+
+##### Stage 2: Pioneer (frequently changing layer)
+FROM ghcr.io/astral-sh/uv:python3.10-bookworm AS pioneer
+
+WORKDIR /tmp
+
+# Compile bytecode for faster startup
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
+
+# Copy virtual environment from builder stage
+COPY --from=builder /opt/venv /opt/venv
+
+# Set environment variables to use virtual environment
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Clone repository (depth 1 for speed and minimal size)
+RUN git clone --depth 1 --single-branch --branch release/2.10 https://github.com/PaddlePaddle/PaddleSeg.git /tmp/paddleseg
+
+# Clone rankseg repository
+COPY . /tmp/rankseg
+
+# Install git dependencies
+RUN uv pip install --no-cache /tmp/paddleseg \
+    && uv pip install --no-cache /tmp/rankseg
 
 # ------------------------------------------------------------------------------------------------
 
 ##### Stage 3: Runtime
 # Use standard python slim image for minimal runtime size (no build tools)
-FROM python:3.10-slim-trixie
+FROM python:3.10-slim-bookworm
 
 WORKDIR /workspace
 
@@ -61,17 +63,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy virtual environment from builder stage
-COPY --from=builder /build/.venv /workspace/.venv
-
-# Copy configuration files from downloader stage
-COPY --from=downloader /tmp/paddleseg/configs /workspace/configs
+# Copy virtual environment from pioneer stage
+COPY --from=builder /opt/venv /opt/venv
 
 # Set environment variables to use virtual environment
-ENV PATH="/workspace/.venv/bin:$PATH"
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy configuration files from pioneer stage
+COPY --from=pioneer /tmp/paddleseg/configs /workspace/configs
 
 # Copy tools scripts (val.py, analyse.py, etc.)
-COPY . /workspace
+COPY rankseg/paddleseg/tools /workspace
 
 # Create directories for data and pretrained models
 RUN mkdir -p /workspace/data && mkdir -p /workspace/pretrained_models

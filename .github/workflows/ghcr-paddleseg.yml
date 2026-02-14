@@ -53,7 +53,7 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
-          context: rankseg/paddleseg/tools
+          context: .
           file: rankseg/paddleseg/tools/Dockerfile
           platforms: linux/amd64
           push: true
