@@ -1,51 +1,72 @@
-# Use a Python image with uv pre-installed
-FROM ghcr.io/astral-sh/uv:python3.10-trixie-slim
+##### Stage 1: Downloader
+# Use a lightweight git image to clone repositories
+FROM alpine/git AS downloader
+
+WORKDIR /tmp
+# Clone repository (depth 1 for speed and minimal size)
+RUN git clone --depth 1 --single-branch --branch release/2.10 https://github.com/PaddlePaddle/PaddleSeg.git /tmp/paddleseg
+
+# ------------------------------------------------------------------------------------------------
+
+##### Stage 2: Builder
+# Use uv image for fast dependency installation
+FROM ghcr.io/astral-sh/uv:python3.10-trixie-slim AS builder
+
+WORKDIR /build
+
+# Compile bytecode for faster startup
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
+
+# Install Python dependencies into virtual environment /build/.venv
+
+# 1. Create virtual environment
+RUN uv venv /build/.venv
+
+# 2. Activate virtual environment
+ENV PATH="/build/.venv/bin:$PATH"
+
+# 3. Install dependencies
+# Step-by-step installation to leverage caching
+# Install CPU versions of torch and paddle to save significant space
+# Install heavy dependencies first (cached layer)
+RUN uv pip install --no-cache "numpy<2.0" \
+    && uv pip install --no-cache torch --index-url https://download.pytorch.org/whl/cpu \
+    && uv pip install --no-cache paddlepaddle==3.3.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
+
+# Install git dependencies (frequently changing layer)
+RUN uv pip install --no-cache git+https://github.com/PaddlePaddle/PaddleSeg.git@release/2.10 \
+    && uv pip install --no-cache git+https://github.com/Leev1s/rankseg.git@paddleseg
+
+# ------------------------------------------------------------------------------------------------
+
+##### Stage 3: Runtime
+# Use standard python slim image for minimal runtime size (no build tools)
+FROM python:3.10-slim-trixie
 
 WORKDIR /workspace
 
-# Enable bytecode compilation
-ENV UV_COMPILE_BYTECODE=1
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    tar \
+# Install necessary runtime system libraries 
+# OpenCV requires libgl1, libglib2.0-0
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install python dependencies
-# Combined steps to reduce image size:
-# 1. Install pip packages
-# 2. Clone PaddleSeg to /tmp, install it, extract configs, then remove source
-# 3. Install rankseg
-# 4. Clean uv cache
-RUN uv pip install --system "numpy<2.0" \
-    && uv pip install --system torch -i https://download.pytorch.org/whl/cpu \
-    && uv pip install --system paddlepaddle==3.3.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/ \
-    && git clone --depth 1 --single-branch --branch release/2.10 https://github.com/PaddlePaddle/PaddleSeg.git /tmp/paddleseg \
-    && uv pip install --system /tmp/paddleseg \
-    && cp -r /tmp/paddleseg/configs /workspace/configs \
-    && rm -rf /tmp/paddleseg \
-    && uv pip install --system git+https://github.com/Leev1s/rankseg.git@paddleseg \
-    && uv cache clean
+# Copy virtual environment from builder stage
+COPY --from=builder /build/.venv /workspace/.venv
+
+# Copy configuration files from downloader stage
+COPY --from=downloader /tmp/paddleseg/configs /workspace/configs
+
+# Set environment variables to use virtual environment
+ENV PATH="/workspace/.venv/bin:$PATH"
 
 # Copy tools scripts (val.py, analyse.py, etc.)
 COPY . /workspace
 
-# Create 'download' command
-RUN echo '#!/bin/bash\n\
-set -e\n\
-echo "Downloading CamVid dataset..."\n\
-mkdir -p data\n\
-curl -L https://paddleseg.bj.bcebos.com/dataset/camvid.tar -o data/camvid.tar\n\
-(cd data && tar -xf camvid.tar && echo "Dataset Extracted")\n\
-echo "Downloading pretrained models..."\n\
-mkdir -p pretrained_models/pp_liteseg_camvid\n\
-curl -L https://paddleseg.bj.bcebos.com/dygraph/camvid/pp_liteseg_stdc1_camvid_960x720_10k/model.pdparams -o pretrained_models/pp_liteseg_camvid/model-t.pdparams\n\
-curl -L https://paddleseg.bj.bcebos.com/dygraph/camvid/pp_liteseg_stdc2_camvid_960x720_10k/model.pdparams -o pretrained_models/pp_liteseg_camvid/model-b.pdparams\n\
-' > /usr/local/bin/download && chmod +x /usr/local/bin/download
+# Create directories for data and pretrained models
+RUN mkdir -p /workspace/data && mkdir -p /workspace/pretrained_models
 
 CMD ["/bin/bash"]
