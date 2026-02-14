@@ -6,6 +6,9 @@ WORKDIR /tmp
 # Clone repository (depth 1 for speed and minimal size)
 RUN git clone --depth 1 --single-branch --branch release/2.10 https://github.com/PaddlePaddle/PaddleSeg.git /tmp/paddleseg
 
+# Clone rankseg repository
+RUN git clone --depth 1 --single-branch --branch paddleseg https://github.com/Leev1s/rankseg.git /tmp/rankseg
+
 # ------------------------------------------------------------------------------------------------
 
 ##### Stage 2: Builder
@@ -23,10 +26,14 @@ ENV UV_LINK_MODE=copy
 # 1. Create virtual environment
 RUN uv venv /build/.venv
 
-# 2. Activate virtual environment
+# 2. Copy repositories
+COPY --from=downloader /tmp/paddleseg /build/paddleseg
+COPY --from=downloader /tmp/rankseg /build/rankseg
+
+# 3. Activate virtual environment
 ENV PATH="/build/.venv/bin:$PATH"
 
-# 3. Install dependencies
+# 4. Install dependencies
 # Step-by-step installation to leverage caching
 # Install CPU versions of torch and paddle to save significant space
 # Install heavy dependencies first (cached layer)
@@ -35,8 +42,8 @@ RUN uv pip install --no-cache "numpy<2.0" \
     && uv pip install --no-cache paddlepaddle==3.3.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
 # Install git dependencies (frequently changing layer)
-RUN uv pip install --no-cache git+https://github.com/PaddlePaddle/PaddleSeg.git@release/2.10 \
-    && uv pip install --no-cache git+https://github.com/Leev1s/rankseg.git@paddleseg
+RUN uv pip install --no-cache /build/paddleseg \
+    && uv pip install --no-cache /build/rankseg
 
 # ------------------------------------------------------------------------------------------------
 
