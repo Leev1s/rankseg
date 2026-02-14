@@ -64,7 +64,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from pioneer stage
-COPY --from=builder /opt/venv /opt/venv
+COPY --from=pioneer /opt/venv /opt/venv
 
 # Set environment variables to use virtual environment
 ENV PATH="/opt/venv/bin:$PATH"
