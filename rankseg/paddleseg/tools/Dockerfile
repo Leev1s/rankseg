@@ -9,8 +9,8 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
 # Install Python dependencies into virtual environment /build/.venv
-# Create virtual environment
-RUN uv venv /opt/venv
+# Create virtual environment (include pip & setuptools for paddle compatibility)
+RUN uv venv --seed /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Install dependencies
