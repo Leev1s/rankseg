@@ -5,7 +5,7 @@ on:
     branches:
       - paddleseg
     paths:
-      - 'rankseg/paddleseg/tools/**'
+      - 'rankseg/paddleseg/**'
       - '.github/workflows/ghcr-paddleseg.yml'
   workflow_dispatch:
 
@@ -54,7 +54,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: rankseg/paddleseg/tools/Dockerfile
+          file: rankseg/paddleseg/Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
