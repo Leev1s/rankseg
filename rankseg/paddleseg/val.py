@@ -96,6 +96,8 @@ def evaluate(model,
     label_area_all = paddle.zeros([1], dtype='int64')
     logits_all = None
     label_all = None
+    # For image-level IoU calculation (IoU^I)
+    miou_per_image_list = []
 
     if print_detail:
         logger.info("Start evaluating (total_samples: {}, total_iters: {})...".
@@ -194,6 +196,11 @@ def evaluate(model,
                 ignore_index=eval_dataset.ignore_index,
                 use_multilabel=use_multilabel)
 
+            # Calculate image-level IoU (IoU^I)
+            class_iou_per_img, miou_per_img = metrics.mean_iou(
+                intersect_area, pred_area, label_area)
+            miou_per_image_list.append(miou_per_img)
+
             # Gather from all ranks
             if nranks > 1:
                 intersect_area_list = []
@@ -250,6 +257,9 @@ def evaluate(model,
     kappa = metrics.kappa(*metrics_input)
     class_dice, mdice = metrics.dice(*metrics_input)
 
+    # Calculate image-level mIoU (IoU^I) - average of per-image IoUs
+    miou_image_level = np.mean(miou_per_image_list)
+
     if auc_roc:
         auc_roc = metrics.auc_roc(
             logits_all, label_all, num_classes=eval_dataset.num_classes)
@@ -260,6 +270,7 @@ def evaluate(model,
             len(eval_dataset), miou, acc, kappa, mdice)
         infor = infor + auc_infor if auc_roc else infor
         logger.info(infor)
+        logger.info("[EVAL] Image-level average mIoU (IoU^I): {:.4f}".format(miou_image_level))
         logger.info("[EVAL] Class IoU: \n" + str(np.round(class_iou, 4)))
         logger.info("[EVAL] Class Precision: \n" + str(
             np.round(class_precision, 4)))
