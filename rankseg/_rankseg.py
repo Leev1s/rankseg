@@ -54,7 +54,7 @@ class RankSEG(object):
         below this threshold may be skipped to improve efficiency.
         Should be in range [0, 1].
     
-    \*\*solver_params : dict
+    **solver_params : dict
         Additional parameters passed to the specific solver.
         For 'BA', 'TRNA' or 'BA+TRNA': eps (1 - confidence intervals for refined 
         normal approximation of poissoon-binomial distributions)
@@ -97,7 +97,7 @@ class RankSEG(object):
         Parameters
         ----------
         probs : torch.Tensor
-            Probability maps of shape (batch_size, num_class, \*image_shape).
+            Probability maps of shape (batch_size, num_class, *image_shape).
             Values should be in range [0, 1].
             image_shape has no restriction on the number of dimensions,
             can be (height, width) for 2D images, or (height, width, depth) for 3D images, or others.
@@ -105,7 +105,7 @@ class RankSEG(object):
         Returns
         -------
         preds : torch.Tensor
-            Binary segmentation predictions of shape (batch_size, num_class, \*image_shape).
+            Binary segmentation predictions of shape (batch_size, num_class, *image_shape).
             Values are 0 or 1 (or boolean True/False depending on solver).
         """
         batch_size, num_class, *image_shape = probs.shape

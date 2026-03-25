@@ -15,7 +15,7 @@ def rankdice_ba(probs: torch.Tensor,
 
     Parameters
     ----------
-    probs : Tensor, shape (batch_size, num_class, \*image_shape)
+    probs : Tensor, shape (batch_size, num_class, *image_shape)
         The estimated probability tensor. 
     
     solver : str, {'exact', 'TRNA', 'BA', 'BA+TRNA'}
@@ -41,7 +41,7 @@ def rankdice_ba(probs: torch.Tensor,
 
     Returns
     -------
-    preds : Tensor, shape (batch_size, num_class, \*image_shape)
+    preds : Tensor, shape (batch_size, num_class, *image_shape)
         The predicted segmentation based on `rankdice`.
 
     References
@@ -216,7 +216,7 @@ def rankseg_rma(
 
     Parameters
     ----------
-    probs : Tensor, shape (batch_size, num_class, \*image_shape)
+    probs : Tensor, shape (batch_size, num_class, *image_shape)
         The estimated probability tensor.
 
     metric : str, default='dice'
@@ -237,8 +237,8 @@ def rankseg_rma(
     Returns
     -------
     preds : Tensor
-        Shape (batch_size, num_class, \*image_shape) if output_mode == 'multilabel',
-        otherwise shape (batch_size, \*image_shape)
+        Shape (batch_size, num_class, *image_shape) if output_mode == 'multilabel',
+        otherwise shape (batch_size, *image_shape)
 
     References
     ----------
