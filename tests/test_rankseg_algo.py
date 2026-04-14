@@ -50,6 +50,20 @@ def test_rankseg_rma_pruning_can_return_all_zero_masks():
     assert int(preds.sum().item()) == 0
 
 
+def test_rankseg_rma_rejects_unknown_metric():
+    probs = _demo_probs()
+
+    with pytest.raises(ValueError, match="metric should be iou or dice"):
+        rankseg_rma(probs, metric="f1", output_mode="multiclass")
+
+
+def test_rankseg_rma_rejects_unknown_output_mode():
+    probs = _demo_probs()
+
+    with pytest.raises(ValueError, match="output_mode should be multiclass or multilabel"):
+        rankseg_rma(probs, metric="dice", output_mode="overlap")
+
+
 def test_rankdice_ba_trna_returns_binary_masks():
     probs = _demo_probs()
 

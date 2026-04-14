@@ -250,7 +250,11 @@ def rankseg_rma(
     """
 
     metric = metric.strip().lower() if isinstance(metric, str) else metric
-    assert metric in ["iou", "dice"], "metric should be iou or dice"
+    output_mode = output_mode.strip().lower() if isinstance(output_mode, str) else output_mode
+    if metric not in ["iou", "dice"]:
+        raise ValueError("metric should be iou or dice")
+    if output_mode not in ["multiclass", "multilabel"]:
+        raise ValueError("output_mode should be multiclass or multilabel")
 
     def compute_opt_tau(
         metric: str,

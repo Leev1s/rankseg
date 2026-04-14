@@ -17,7 +17,9 @@ class RankSEG(object):
     Parameters
     ----------
     metric : str, default='dice'
-        The segmentation metric to optimize. Currently supported:
+        The segmentation metric to optimize. String values are matched
+        case-insensitively after stripping leading and trailing whitespace.
+        Currently supported:
 
         - 'dice': Dice coefficient
         - 'IoU': Intersection over Union
@@ -28,11 +30,15 @@ class RankSEG(object):
         division by zero and improve numerical stability.
 
     output_mode : {'multiclass', 'multilabel'}, default='multiclass'
+        String values are matched case-insensitively after stripping leading
+        and trailing whitespace.
         Controls whether predictions are non-overlapping or overlapping.
         - 'multiclass': non-overlapping; each pixel belongs to exactly one class.
         - 'multilabel': overlapping; pixels can belong to multiple classes (binary mask per class).
 
     solver : str, default='RMA'
+        String values are matched case-insensitively after stripping leading
+        and trailing whitespace.
         The optimization solver to use. Options:
 
         - When metric is 'dice':
@@ -60,7 +66,7 @@ class RankSEG(object):
     \*\*solver_params : dict
         Additional parameters passed to the specific solver.
         For 'BA', 'TRNA' or 'BA+TRNA': eps (1 - confidence intervals for refined
-        normal approximation of poissoon-binomial distributions)
+        normal approximation of poisson-binomial distributions)
 
     References
     ----------
@@ -98,21 +104,27 @@ class RankSEG(object):
         self.solver_params = solver_params
 
     def predict(self, probs):
-        r"""Convert probability maps to binary segmentation predictions.
+        r"""Convert probability maps to segmentation predictions.
 
         Parameters
         ----------
         probs : torch.Tensor
             Probability maps of shape (batch_size, num_class, \*image_shape).
-            Values should be in range [0, 1].
+            Values must be finite and lie in the range [0, 1].
             image_shape has no restriction on the number of dimensions,
             can be (height, width) for 2D images, or (height, width, depth) for 3D images, or others.
 
         Returns
         -------
         preds : torch.Tensor
-            Binary segmentation predictions of shape (batch_size, num_class, \*image_shape).
-            Values are 0 or 1 (or boolean True/False depending on solver).
+            If `output_mode == "multilabel"`, returns binary masks of shape
+            (batch_size, num_class, \*image_shape).
+
+            If `output_mode == "multiclass"`, returns class index maps of shape
+            (batch_size, \*image_shape).
+
+            Depending on the selected solver, the returned dtype may be boolean
+            or integer.
         """
         if not isinstance(probs, torch.Tensor):
             raise TypeError("probs must be a torch.Tensor")
@@ -138,7 +150,8 @@ class RankSEG(object):
         if metric == "dice":
             if solver not in ["ba", "trna", "ba+trna", "rma"]:
                 warnings.warn(
-                    "Currently, we only support BA, TRNA, BA+TRNA, RMA solvers for Dice metric; this prediction uses `RMA`."
+                    "Currently, we only support BA, TRNA, BA+TRNA, RMA solvers for Dice metric; this prediction uses `RMA`.",
+                    stacklevel=2,
                 )
                 solver = "rma"
 
@@ -154,7 +167,8 @@ class RankSEG(object):
             else:
                 if (output_mode == "multiclass") and (num_class > 1):
                     warnings.warn(
-                        "For Dice metric with BA/TRNA/BA+TRNA solver, it only supports returning binary masks per class (multi-label segmentation). This prediction uses `RMA`."
+                        "For Dice metric with BA/TRNA/BA+TRNA solver, it only supports returning binary masks per class (multi-label segmentation). This prediction uses `RMA`.",
+                        stacklevel=2,
                     )
                     solver = "rma"
 
@@ -177,7 +191,9 @@ class RankSEG(object):
 
         elif metric == "iou":
             if solver != "rma":
-                warnings.warn("Currently, we only support RMA solver for IoU metric; this prediction uses `RMA`.")
+                warnings.warn(
+                    "Currently, we only support RMA solver for IoU metric; this prediction uses `RMA`.", stacklevel=2
+                )
                 solver = "rma"
 
             preds = rankseg_rma(
@@ -200,7 +216,8 @@ class RankSEG(object):
                         warnings.warn(
                             "Returning argmax binary masks. For multilabel segmentation with accuracy metric, argmax solver "
                             "produces non-overlapping predictions (multiclass output). Consider using 'TR' "
-                            "solver for true multilabel outcome. "
+                            "solver for true multilabel outcome. ",
+                            stacklevel=2,
                         )
                         preds = torch.zeros_like(probs)
                         class_indices = torch.argmax(probs, dim=1, keepdim=True)
@@ -211,13 +228,15 @@ class RankSEG(object):
                         preds = torch.where(probs > 0.5, 1, 0)
                     else:
                         warnings.warn(
-                            "Currently, only argmax and truncation solvers support overlapping multi-class segmentation, and this prediction uses the TR solver."
+                            "Currently, only argmax and truncation solvers support overlapping multi-class segmentation, and this prediction uses the TR solver.",
+                            stacklevel=2,
                         )
                         preds = torch.where(probs > 0.5, 1, 0)
                 else:
                     if solver != "argmax":
                         warnings.warn(
-                            "Currently, only argmax solver supports non-overlapping multi-class segmentation, and this prediction uses the argmax solver."
+                            "Currently, only argmax solver supports non-overlapping multi-class segmentation, and this prediction uses the argmax solver.",
+                            stacklevel=2,
                         )
                     ## simply take argmax over classes
                     preds = torch.argmax(probs, dim=1)

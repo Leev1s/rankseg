@@ -78,3 +78,14 @@ def test_refined_normal_pb_icdf_round_trips_for_nonzero_skew():
     recovered = rv.cdf(rv.icdf(probs))
 
     assert torch.allclose(recovered, probs, atol=1e-5)
+
+
+def test_refined_normal_pb_icdf_handles_extreme_skew():
+    probs = torch.tensor([1e-4, 0.2, 0.8, 1 - 1e-4])
+    rv = RefinedNormalPB(dim=100, loc=0.0, scale=0.1, skew=-2.0)
+
+    x = rv.icdf(probs)
+    recovered = rv.cdf(x)
+
+    assert bool(torch.isfinite(x).all())
+    assert torch.allclose(recovered, probs, atol=1e-4)

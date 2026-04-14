@@ -117,7 +117,7 @@ class RefinedNormalPB(Distribution):
 
     def icdf(self, p, max_iter=1000, tol=1e-6):
         ## To be optimized: Brent’s method is better for root finding.
-        """Inverse CDF (quantile function) using Newton-Raphson method.
+        """Inverse CDF (quantile function) using bracketed bisection.
 
         Parameters
         ----------
@@ -136,30 +136,36 @@ class RefinedNormalPB(Distribution):
         # Clamp probabilities to valid range
         p = torch.clamp(p, 1e-8, 1 - 1e-8)
 
-        # Initialize with normal quantiles as starting point
-        norm = Normal(0, 1)
         loc = self.loc
         scale = self.scale
         while loc.ndim < p.ndim:
             loc = loc.unsqueeze(-1)
             scale = scale.unsqueeze(-1)
-        x = loc - 0.5 + scale * norm.icdf(p)
 
-        # Newton-Raphson iterations
-        for _ in range(max_iter):
-            fx = self.cdf(x) - p
-            fpx = self.pdf(x)
+        low = loc - 0.5 - 8.0 * scale
+        high = loc - 0.5 + 8.0 * scale
 
-            # Avoid division by zero
-            fpx = torch.clamp(fpx, min=1e-10)
-            x_new = x - fx / fpx
-
-            # Check convergence
-            if torch.max(torch.abs(x_new - x)) < tol:
-                x = x_new
+        for _ in range(min(32, max_iter)):
+            cdf_low = self.cdf(low)
+            cdf_high = self.cdf(high)
+            need_lower = cdf_low > p
+            need_upper = cdf_high < p
+            if not bool(need_lower.any() or need_upper.any()):
                 break
-            x = x_new
-        return x
+            width = high - low
+            low = torch.where(need_lower, low - width, low)
+            high = torch.where(need_upper, high + width, high)
+
+        for _ in range(max_iter):
+            mid = (low + high) / 2
+            cdf_mid = self.cdf(mid)
+            go_right = cdf_mid < p
+            low = torch.where(go_right, mid, low)
+            high = torch.where(go_right, high, mid)
+            if torch.max(torch.abs(high - low)) < tol:
+                break
+
+        return (low + high) / 2
 
     def interval(self, p):
         """
