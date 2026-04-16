@@ -27,12 +27,15 @@
 
 Explore RankSEG by reading our [documentation](https://rankseg.readthedocs.io/en/latest/).
 
+> If RankSEG improves your segmentation workflow, please consider starring the repo:
+> https://github.com/rankseg/rankseg
+
 ### 🌟 Why RankSEG?
 Conventional methods use `argmax` or fixed `thresholding`, which are **not theoretically optimized** for non-decomposable metrics like Dice or IoU. RankSEG bridges this gap by directly optimizing the target metric, yielding "free" performance gains.
 
 <div align="center">
-  <p align="center"><b>Demo: RankSEG vs. Argmax on <i>fashn-human-parser</i></b></p>
-  <img src="https://raw.githubusercontent.com/rankseg/rankseg/main/fig/fashn-ai-fashn-human-parser.gif" alt="RankSEG vs Argmax Comparison" width="80%">
+  <p align="center"><b>Demo: RankSEG vs. Argmax on <i>Segformer ADE20k</i></b></p>
+  <img src="./fig/tmpclkalz9y.gif" alt="RankSEG vs Argmax Comparison" width="85%">
 </div>
 
 ## ⚡ Quick Start
@@ -78,8 +81,8 @@ These are the maintained integration entry points documented by this repository.
 | Path | Status | Entry |
 | :--- | :---: | :--- |
 | **PyTorch Native** | **Ready** | [Docs](https://rankseg.readthedocs.io/en/latest/integrations_pytorch.html) · [Example](https://github.com/rankseg/rankseg/blob/main/examples/pytorch_native_rankseg.py) |
-| **Segment Anything (SAM)** | Planned | Official integration guide in progress |
-| **MMSegmentation** | Planned | Official integration guide in progress |
+| **Transformers** | Planned | Official integration guide in progress |
+<!-- | **MMSegmentation** | Planned | Official integration guide in progress | -->
 
 ## 🌐 External Integrations
 

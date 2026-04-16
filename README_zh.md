@@ -26,6 +26,9 @@
 
 了解 RankSEG 的更多信息，请查看[我们的文档](https://rankseg.readthedocs.io/en/latest/)。
 
+> 如果 RankSEG 对您的分割工作流有帮助，欢迎给项目点一个 star：
+> https://github.com/rankseg/rankseg
+
 <!--![image](./fig/rankseg.png)-->
 
 <div align="center">
