@@ -18,11 +18,23 @@ The main helper is:
 
 .. code-block:: python
 
-   postprocess(outputs, *, model=None, target_sizes, rankseg_kwargs=None)
+   postprocess(
+       outputs,
+       *,
+       model=None,
+       output_type=None,
+       target_sizes=None,
+       original_sizes=None,
+       reshaped_input_sizes=None,
+       rankseg_kwargs=None,
+       threshold=0.3,
+       pad_size=None,
+       apply_non_overlapping_constraints=False,
+   )
 
 Its role is intentionally narrow:
 
-- restore semantic probabilities from supported Hugging Face output families;
+- restore probabilities from supported Hugging Face output families;
 - resize them to the original image size when needed;
 - apply ``RankSEG`` as the final post-processing step.
 
@@ -56,7 +68,7 @@ For supported output families, ``postprocess(...)`` replaces the final
 ``argmax``-style decision step while preserving the surrounding Hugging Face
 inference code.
 
-Low-level helper
+Advanced helpers
 ----------------
 
 The module also exposes:
@@ -64,10 +76,14 @@ The module also exposes:
 .. code-block:: python
 
    from rankseg.transformers import restore_semantic_probs
+   from rankseg.transformers import restore_sam_mask_probs
 
-``restore_semantic_probs(...)`` is a lower-level helper for users who want the
+``restore_semantic_probs(...)`` is an advanced helper for users who want the
 restored semantic probability map directly. It may be imported and used
-directly, but it is not the primary recommended API.
+directly, but ``postprocess(...)`` is the recommended inference entry point.
+
+``restore_sam_mask_probs(...)`` is the SAM-family counterpart. It restores SAM
+mask probabilities without requiring a Hugging Face processor object.
 
 Supported output families
 -------------------------
@@ -83,6 +99,32 @@ by ``transformers``:
 When a branch requires model-specific handling, pass ``model=...`` so the
 helper can follow the corresponding official post-processing behavior.
 
+SAM output families
+-------------------
+
+``postprocess(...)`` also handles SAM-family outputs directly:
+
+- SAM prompt masks from ``outputs.pred_masks`` + ``outputs.iou_scores``
+- SAM3 semantic masks from ``outputs.semantic_seg``
+- SAM3 instance masks from ``outputs.pred_logits`` + ``outputs.pred_boxes`` +
+  ``outputs.pred_masks``
+
+For SAM1 prompt masks, pass both ``original_sizes`` and
+``reshaped_input_sizes`` from the processor inputs. For SAM2 prompt masks, pass
+``original_sizes``. For SAM3 semantic and instance masks, pass ``target_sizes``
+or ``original_sizes`` when resizing to the image size is desired.
+
+The SAM path follows the official Transformers post-processing order up to the
+final binary decision. RankSEG replaces that final thresholding step. For SAM3
+instance outputs, ``threshold`` matches the official score-filtering argument.
+``apply_non_overlapping_constraints`` applies only to SAM-family prompt-mask
+outputs, matching the official mask post-processing API.
+
+SAM3 image outputs can contain both instance and semantic fields. In that case,
+``postprocess(...)`` follows the instance path by default, matching
+``post_process_instance_segmentation(...)``. Pass ``output_type="semantic"`` to
+follow ``post_process_semantic_segmentation(...)`` instead.
+
 Current exclusions
 ------------------
 
@@ -92,6 +134,7 @@ The simplified API does not currently support:
 - tuple-style outputs such as ``return_dict=False`` returns;
 - custom unstructured outputs from ``trust_remote_code=True`` models;
 - SegGPT-style ``pred_masks`` semantic reconstruction.
+- SAM video tracker state.
 
 These cases should fail explicitly rather than silently using an incorrect
 semantic restoration path.
@@ -101,4 +144,6 @@ Notebook and Colab demo
 
 - Example script: `examples/transformers_rankseg.py <https://github.com/rankseg/rankseg/blob/main/examples/transformers_rankseg.py>`_
 - Notebook: `notebooks/rankseg_with_transformers.ipynb <https://github.com/rankseg/rankseg/blob/main/notebooks/rankseg_with_transformers.ipynb>`_
+- SAM family notebook: `notebooks/rankseg_with_sam_family.ipynb <https://github.com/rankseg/rankseg/blob/main/notebooks/rankseg_with_sam_family.ipynb>`_
 - Colab: `Open the notebook in Colab <https://colab.research.google.com/github/rankseg/rankseg/blob/main/notebooks/rankseg_with_transformers.ipynb>`_
+- SAM family Colab: `Open the SAM notebook in Colab <https://colab.research.google.com/github/rankseg/rankseg/blob/main/notebooks/rankseg_with_sam_family.ipynb>`_
