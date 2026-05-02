@@ -122,10 +122,17 @@ def _is_sam_prompt_outputs(outputs) -> bool:
     )
 
 
-def _normalize_sam_output_type(output_type: str | None) -> str | None:
-    if output_type not in (None, "instance", "semantic", "prompt"):
-        raise ValueError("`output_type` must be one of None, 'instance', 'semantic', or 'prompt'.")
-    return output_type
+def _is_sam3_semantic_outputs(outputs) -> bool:
+    return _get_output_value(outputs, "semantic_seg") is not None and (
+        _matches_output_class(outputs, "Sam3ImageSegmentationOutput")
+        or _matches_output_class(outputs, "Sam3LiteTextImageSegmentationOutput")
+    )
+
+
+def _normalize_sam_task(sam_task: str | None) -> str | None:
+    if sam_task not in (None, "instance", "semantic", "prompt"):
+        raise ValueError("`sam_task` must be one of None, 'instance', 'semantic', or 'prompt'.")
+    return sam_task
 
 
 def _apply_sam_non_overlapping_constraints(masks: torch.Tensor) -> torch.Tensor:
@@ -195,10 +202,10 @@ def _restore_sam3_semantic_mask_probs(outputs, *, target_sizes=None, original_si
     semantic_probs = semantic_seg.float().sigmoid()
     sizes = target_sizes if target_sizes is not None else original_sizes
     if sizes is None:
-        return semantic_probs
+        return [semantic_probs[idx] for idx in range(semantic_probs.shape[0])]
 
     target_sizes = _normalize_size_list(sizes, semantic_probs.shape[0], "target_sizes")
-    output_masks = [
+    return [
         F.interpolate(
             semantic_probs[idx].unsqueeze(0),
             size=target_sizes[idx],
@@ -207,9 +214,6 @@ def _restore_sam3_semantic_mask_probs(outputs, *, target_sizes=None, original_si
         )[0]
         for idx in range(semantic_probs.shape[0])
     ]
-    if all(size == target_sizes[0] for size in target_sizes[1:]):
-        return torch.stack(output_masks)
-    return output_masks
 
 
 def _restore_sam3_instance_mask_probs(
@@ -266,7 +270,7 @@ def _restore_sam3_instance_mask_probs(
 def restore_sam_mask_probs(
     outputs,
     *,
-    output_type=None,
+    sam_task=None,
     target_sizes=None,
     original_sizes=None,
     reshaped_input_sizes=None,
@@ -274,9 +278,9 @@ def restore_sam_mask_probs(
     pad_size=None,
     apply_non_overlapping_constraints=False,
 ):
-    output_type = _normalize_sam_output_type(output_type)
+    sam_task = _normalize_sam_task(sam_task)
 
-    if output_type in (None, "instance") and _is_sam3_instance_outputs(outputs):
+    if sam_task in (None, "instance") and _is_sam3_instance_outputs(outputs):
         return _restore_sam3_instance_mask_probs(
             outputs,
             target_sizes=target_sizes,
@@ -284,14 +288,14 @@ def restore_sam_mask_probs(
             threshold=threshold,
         )
 
-    if output_type in (None, "semantic") and _get_output_value(outputs, "semantic_seg") is not None:
+    if sam_task in (None, "semantic") and _get_output_value(outputs, "semantic_seg") is not None:
         return _restore_sam3_semantic_mask_probs(
             outputs,
             target_sizes=target_sizes,
             original_sizes=original_sizes,
         )
 
-    if output_type in (None, "prompt") and _is_sam_prompt_outputs(outputs):
+    if sam_task in (None, "prompt") and _is_sam_prompt_outputs(outputs):
         pred_masks = _get_output_value(outputs, "pred_masks")
         if not isinstance(pred_masks, torch.Tensor):
             raise TypeError("`outputs.pred_masks` must be a torch.Tensor.")
@@ -308,7 +312,7 @@ def restore_sam_mask_probs(
             apply_non_overlapping_constraints=apply_non_overlapping_constraints,
         )
 
-    raise ValueError("Unsupported SAM outputs structure for mask probability restoration.")
+    raise ValueError(f"Unsupported SAM outputs structure for `sam_task` {sam_task!r}.")
 
 
 def _rankseg_kwargs(rankseg_kwargs, *, default_output_mode: str) -> dict:
@@ -368,7 +372,7 @@ def _predict_sam_semantic_mask_probs(mask_probs, rankseg_kwargs):
 def _postprocess_sam_outputs(
     outputs,
     *,
-    output_type=None,
+    sam_task=None,
     target_sizes=None,
     original_sizes=None,
     reshaped_input_sizes=None,
@@ -377,10 +381,10 @@ def _postprocess_sam_outputs(
     pad_size=None,
     apply_non_overlapping_constraints=False,
 ):
-    output_type = _normalize_sam_output_type(output_type)
+    sam_task = _normalize_sam_task(sam_task)
     mask_probs = restore_sam_mask_probs(
         outputs,
-        output_type=output_type,
+        sam_task=sam_task,
         target_sizes=target_sizes,
         original_sizes=original_sizes,
         reshaped_input_sizes=reshaped_input_sizes,
@@ -388,10 +392,8 @@ def _postprocess_sam_outputs(
         pad_size=pad_size,
         apply_non_overlapping_constraints=apply_non_overlapping_constraints,
     )
-    if output_type == "semantic" or (
-        output_type is None
-        and _get_output_value(outputs, "semantic_seg") is not None
-        and not _is_sam3_instance_outputs(outputs)
+    if sam_task == "semantic" or (
+        sam_task is None and _is_sam3_semantic_outputs(outputs) and not _is_sam3_instance_outputs(outputs)
     ):
         return _predict_sam_semantic_mask_probs(mask_probs, rankseg_kwargs)
     return _predict_sam_mask_probs(mask_probs, rankseg_kwargs)
@@ -468,7 +470,7 @@ def postprocess(
     outputs,
     *,
     model=None,
-    output_type=None,
+    sam_task=None,
     target_sizes=None,
     original_sizes=None,
     reshaped_input_sizes=None,
@@ -480,11 +482,12 @@ def postprocess(
     if (
         _is_sam3_instance_outputs(outputs)
         or _is_sam_prompt_outputs(outputs)
-        or output_type is not None
+        or _is_sam3_semantic_outputs(outputs)
+        or sam_task is not None
     ):
         return _postprocess_sam_outputs(
             outputs,
-            output_type=output_type,
+            sam_task=sam_task,
             target_sizes=target_sizes,
             original_sizes=original_sizes,
             reshaped_input_sizes=reshaped_input_sizes,

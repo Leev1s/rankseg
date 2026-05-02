@@ -22,7 +22,7 @@ The main helper is:
        outputs,
        *,
        model=None,
-       output_type=None,
+       sam_task=None,
        target_sizes=None,
        original_sizes=None,
        reshaped_input_sizes=None,
@@ -83,7 +83,8 @@ restored semantic probability map directly. It may be imported and used
 directly, but ``postprocess(...)`` is the recommended inference entry point.
 
 ``restore_sam_mask_probs(...)`` is the SAM-family counterpart. It restores SAM
-mask probabilities without requiring a Hugging Face processor object.
+mask probabilities without requiring a Hugging Face processor object. Use it
+when you need probability maps directly instead of final RankSEG masks.
 
 Supported output families
 -------------------------
@@ -114,16 +115,28 @@ For SAM1 prompt masks, pass both ``original_sizes`` and
 ``original_sizes``. For SAM3 semantic and instance masks, pass ``target_sizes``
 or ``original_sizes`` when resizing to the image size is desired.
 
-The SAM path follows the official Transformers post-processing order up to the
-final binary decision. RankSEG replaces that final thresholding step. For SAM3
-instance outputs, ``threshold`` matches the official score-filtering argument.
-``apply_non_overlapping_constraints`` applies only to SAM-family prompt-mask
-outputs, matching the official mask post-processing API.
+The SAM path follows the official Transformers post-processing order through
+the geometry and score restoration steps. RankSEG replaces the final binary
+mask decision. For SAM3 instance outputs, ``threshold`` matches the official
+score-filtering argument. ``apply_non_overlapping_constraints`` applies only to
+SAM-family prompt-mask outputs, matching the official mask post-processing API.
 
 SAM3 image outputs can contain both instance and semantic fields. In that case,
 ``postprocess(...)`` follows the instance path by default, matching
-``post_process_instance_segmentation(...)``. Pass ``output_type="semantic"`` to
+``post_process_instance_segmentation(...)``. Pass ``sam_task="semantic"`` to
 follow ``post_process_semantic_segmentation(...)`` instead.
+
+``sam_task`` is only a SAM-family disambiguation parameter. It accepts
+``"prompt"``, ``"instance"``, or ``"semantic"``. Leave it unset for automatic
+routing unless a SAM3 output contains both instance and semantic fields.
+
+For SAM3 semantic outputs, ``postprocess(..., sam_task="semantic")`` returns a
+per-image list of 2D binary masks, matching the official semantic output
+contract. ``restore_sam_mask_probs(..., sam_task="semantic")`` returns the
+corresponding per-image probability maps with shape ``(1, H, W)``.
+
+``pad_size`` is an advanced SAM1-only override for the official padded mask
+resize/crop flow. SAM2 and SAM3 paths do not use it.
 
 Current exclusions
 ------------------

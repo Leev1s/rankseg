@@ -91,16 +91,6 @@ def test_restore_semantic_probs_from_conditional_detr_keeps_all_classes():
     _assert_probs_sum_to_one(probs)
 
 
-def test_restore_semantic_probs_from_semantic_seg_uses_sigmoid():
-    outputs = SimpleNamespace(semantic_seg=torch.tensor([[[[0.0, 2.0], [-2.0, 0.0]]]], dtype=torch.float32))
-
-    probs = restore_semantic_probs(outputs, target_sizes=(4, 4))
-
-    assert probs.shape == (1, 1, 4, 4)
-    assert float(probs.min()) >= 0.0
-    assert float(probs.max()) <= 1.0
-
-
 def test_restore_semantic_probs_from_mask2former_matches_official_pre_resize():
     class_queries_logits = torch.tensor([[[6.0, 1.0, -4.0], [1.0, 6.0, -4.0]]], dtype=torch.float32)
     masks_queries_logits = torch.tensor(
@@ -267,9 +257,10 @@ def test_restore_sam_mask_probs_from_sam3_semantic_matches_official_order():
 
     expected = F.interpolate(semantic_seg.sigmoid(), size=(4, 5), mode="bilinear", align_corners=False)
 
-    assert isinstance(probs, torch.Tensor)
-    assert probs.shape == (1, 1, 4, 5)
-    assert torch.allclose(probs, expected, atol=1e-6)
+    assert isinstance(probs, list)
+    assert len(probs) == 1
+    assert probs[0].shape == (1, 4, 5)
+    assert torch.allclose(probs[0], expected[0], atol=1e-6)
 
 
 def test_restore_sam_mask_probs_from_sam3_instance_matches_official_pre_threshold_steps():
@@ -337,12 +328,14 @@ def test_postprocess_dispatches_sam3_instance_outputs():
     assert results[0]["masks"].shape == (1, 2, 2)
 
 
-def test_postprocess_dispatches_sam3_semantic_outputs_when_requested():
-    outputs = SimpleNamespace(semantic_seg=torch.tensor([[[[3.0, -3.0], [-3.0, 3.0]]]], dtype=torch.float32))
+def test_postprocess_auto_dispatches_sam3_semantic_outputs():
+    outputs = _outputs(
+        "Sam3ImageSegmentationOutput",
+        semantic_seg=torch.tensor([[[[3.0, -3.0], [-3.0, 3.0]]]], dtype=torch.float32),
+    )
 
     preds = postprocess(
         outputs,
-        output_type="semantic",
         target_sizes=[(2, 2)],
         rankseg_kwargs={"metric": "accuracy"},
     )
@@ -352,8 +345,50 @@ def test_postprocess_dispatches_sam3_semantic_outputs_when_requested():
     assert preds[0].shape == (2, 2)
 
 
-def test_postprocess_rejects_unknown_sam_output_type():
+def test_postprocess_sam3_full_outputs_default_to_instance():
+    outputs = _outputs(
+        "Sam3ImageSegmentationOutput",
+        pred_logits=torch.tensor([[3.0, -3.0]], dtype=torch.float32),
+        pred_boxes=torch.tensor([[[0.0, 0.0, 1.0, 1.0], [0.1, 0.1, 0.2, 0.2]]], dtype=torch.float32),
+        pred_masks=torch.tensor([[[[3.0, -3.0], [-3.0, 3.0]], [[-3.0, -3.0], [-3.0, -3.0]]]], dtype=torch.float32),
+        semantic_seg=torch.tensor([[[[3.0, -3.0], [-3.0, 3.0]]]], dtype=torch.float32),
+    )
+
+    results = postprocess(
+        outputs,
+        target_sizes=[(2, 2)],
+        threshold=0.5,
+        rankseg_kwargs={"metric": "accuracy"},
+    )
+
+    assert len(results) == 1
+    assert set(results[0]) == {"scores", "boxes", "masks"}
+    assert results[0]["masks"].shape == (1, 2, 2)
+
+
+def test_postprocess_sam3_full_outputs_use_semantic_when_requested():
+    outputs = _outputs(
+        "Sam3ImageSegmentationOutput",
+        pred_logits=torch.tensor([[3.0, -3.0]], dtype=torch.float32),
+        pred_boxes=torch.tensor([[[0.0, 0.0, 1.0, 1.0], [0.1, 0.1, 0.2, 0.2]]], dtype=torch.float32),
+        pred_masks=torch.tensor([[[[3.0, -3.0], [-3.0, 3.0]], [[-3.0, -3.0], [-3.0, -3.0]]]], dtype=torch.float32),
+        semantic_seg=torch.tensor([[[[3.0, -3.0], [-3.0, 3.0]]]], dtype=torch.float32),
+    )
+
+    preds = postprocess(
+        outputs,
+        sam_task="semantic",
+        target_sizes=[(2, 2)],
+        rankseg_kwargs={"metric": "accuracy"},
+    )
+
+    assert isinstance(preds, list)
+    assert len(preds) == 1
+    assert preds[0].shape == (2, 2)
+
+
+def test_postprocess_rejects_unknown_sam_task():
     outputs = SimpleNamespace(semantic_seg=torch.randn(1, 1, 2, 2))
 
-    with pytest.raises(ValueError, match="output_type"):
-        postprocess(outputs, output_type="panoptic", target_sizes=[(2, 2)])
+    with pytest.raises(ValueError, match="sam_task"):
+        postprocess(outputs, sam_task="panoptic", target_sizes=[(2, 2)])
