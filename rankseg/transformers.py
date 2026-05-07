@@ -43,7 +43,9 @@ def _normalize_target_size(target_sizes, batch_size: int) -> tuple[int, int]:
             raise ValueError("`target_sizes` must match the batch size when passing per-sample sizes.")
         first = normalized[0]
         if any(size != first for size in normalized[1:]):
-            raise ValueError("Batches with different original image sizes are not supported. Call the helper per sample.")
+            raise ValueError(
+                "Batches with different original image sizes are not supported. Call the helper per sample."
+            )
         return first
 
     raise ValueError("`target_sizes` must be a tuple, list of tuples, or a tensor of shape (2) or (B, 2).")
@@ -127,10 +129,7 @@ def _is_sam3_instance_outputs(outputs) -> bool:
 
 
 def _is_sam_prompt_outputs(outputs) -> bool:
-    return (
-        _get_output_value(outputs, "pred_masks") is not None
-        and _get_output_value(outputs, "iou_scores") is not None
-    )
+    return _get_output_value(outputs, "pred_masks") is not None and _get_output_value(outputs, "iou_scores") is not None
 
 
 def _normalize_sam_task(sam_task: str | None) -> str | None:
