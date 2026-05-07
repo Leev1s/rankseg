@@ -181,62 +181,51 @@ def test_restore_semantic_probs_rejects_pred_masks_only_with_specific_message():
         restore_semantic_probs(outputs, target_sizes=(4, 4))
 
 
-def test_restore_sam_mask_probs_from_sam1_uses_official_pad_size_before_sigmoid():
-    pred_masks = torch.tensor([[[[[4.0, -4.0], [-2.0, 2.0]]]]], dtype=torch.float32)
-    outputs = _outputs(
-        "SamImageSegmentationOutput",
-        pred_masks=pred_masks,
-        iou_scores=torch.ones(1, 1, 1),
-    )
+def _sam_prompt_masks():
+    return torch.tensor([[[[[4.0, -4.0], [-2.0, 2.0]]]]], dtype=torch.float32)
 
-    probs = restore_sam_mask_probs(
-        outputs,
-        original_sizes=[(3, 5)],
-        reshaped_input_sizes=[(8, 10)],
-    )
+
+@pytest.mark.parametrize("class_name", ["SamImageSegmentationOutput", "SamHQImageSegmentationOutput"])
+def test_restore_sam1_style_prompt_outputs_use_padded_geometry(class_name):
+    pred_masks = _sam_prompt_masks()
+    outputs = _outputs(class_name, pred_masks=pred_masks, iou_scores=torch.ones(1, 1, 1))
+
+    probs = restore_sam_mask_probs(outputs, original_sizes=[(3, 5)], reshaped_input_sizes=[(8, 10)])
 
     expected = F.interpolate(pred_masks[0], size=(1024, 1024), mode="bilinear", align_corners=False)
     expected = expected[..., :8, :10]
     expected = F.interpolate(expected, size=(3, 5), mode="bilinear", align_corners=False).sigmoid()
 
-    assert len(probs) == 1
-    assert probs[0].shape == (1, 1, 3, 5)
     assert torch.allclose(probs[0], expected, atol=1e-6)
 
 
-def test_restore_sam_mask_probs_from_sam1_requires_reshaped_input_sizes():
-    outputs = _outputs(
-        "SamImageSegmentationOutput",
-        pred_masks=torch.randn(1, 1, 1, 2, 2),
-        iou_scores=torch.ones(1, 1, 1),
-    )
+def test_restore_sam1_style_prompt_outputs_require_reshaped_input_sizes():
+    outputs = _outputs("SamImageSegmentationOutput", pred_masks=_sam_prompt_masks(), iou_scores=torch.ones(1, 1, 1))
 
     with pytest.raises(ValueError, match="reshaped_input_sizes"):
         restore_sam_mask_probs(outputs, original_sizes=[(4, 4)])
 
 
-def test_restore_sam_mask_probs_from_sam2_resizes_without_padding():
-    pred_masks = torch.tensor(
-        [[[[[4.0, -4.0], [-2.0, 2.0]]], [[[1.0, 2.0], [3.0, 4.0]]]]],
-        dtype=torch.float32,
-    )
-    outputs = SimpleNamespace(pred_masks=pred_masks, iou_scores=torch.ones(1, 2, 1))
+def test_restore_sam2_prompt_outputs_resize_directly_and_ignore_reshaped_input_sizes():
+    pred_masks = _sam_prompt_masks()
+    outputs = _outputs("Sam2ImageSegmentationOutput", pred_masks=pred_masks, iou_scores=torch.ones(1, 1, 1))
 
-    probs = restore_sam_mask_probs(outputs, original_sizes=[(4, 3)])
+    probs = restore_sam_mask_probs(outputs, original_sizes=[(3, 5)], reshaped_input_sizes=[(1, 1)])
 
-    expected = F.interpolate(pred_masks[0], size=(4, 3), mode="bilinear", align_corners=False).sigmoid()
-
-    assert len(probs) == 1
-    assert probs[0].shape == (2, 1, 4, 3)
+    expected = F.interpolate(pred_masks[0], size=(3, 5), mode="bilinear", align_corners=False).sigmoid()
     assert torch.allclose(probs[0], expected, atol=1e-6)
 
 
-def test_restore_sam_mask_probs_from_sam2_applies_non_overlapping_constraints():
+def test_restore_sam2_prompt_outputs_apply_non_overlapping_constraints():
     pred_masks = torch.tensor(
         [[[[[5.0, 1.0], [5.0, 1.0]]], [[[1.0, 5.0], [1.0, 5.0]]]]],
         dtype=torch.float32,
     )
-    outputs = SimpleNamespace(pred_masks=pred_masks, iou_scores=torch.ones(1, 2, 1))
+    outputs = _outputs(
+        "Sam2ImageSegmentationOutput",
+        pred_masks=pred_masks,
+        iou_scores=torch.ones(1, 2, 1),
+    )
 
     probs = restore_sam_mask_probs(
         outputs,
@@ -251,7 +240,7 @@ def test_restore_sam_mask_probs_from_sam2_applies_non_overlapping_constraints():
 
 def test_restore_sam_mask_probs_from_sam3_semantic_matches_official_order():
     semantic_seg = torch.tensor([[[[-4.0, 1.0], [2.0, 8.0]]]], dtype=torch.float32)
-    outputs = SimpleNamespace(semantic_seg=semantic_seg)
+    outputs = _outputs("Sam3ImageSegmentationOutput", semantic_seg=semantic_seg)
 
     probs = restore_sam_mask_probs(outputs, target_sizes=[(4, 5)])
 
@@ -271,7 +260,8 @@ def test_restore_sam_mask_probs_from_sam3_instance_matches_official_pre_threshol
         [[[[4.0, -4.0], [-2.0, 2.0]], [[-3.0, -3.0], [-3.0, -3.0]], [[1.0, 2.0], [3.0, 4.0]]]],
         dtype=torch.float32,
     )
-    outputs = SimpleNamespace(
+    outputs = _outputs(
+        "Sam3ImageSegmentationOutput",
         pred_logits=pred_logits,
         presence_logits=presence_logits,
         pred_boxes=pred_boxes,
@@ -297,7 +287,8 @@ def test_restore_sam_mask_probs_from_sam3_instance_matches_official_pre_threshol
 
 
 def test_postprocess_dispatches_sam_prompt_outputs():
-    outputs = SimpleNamespace(
+    outputs = _outputs(
+        "Sam2ImageSegmentationOutput",
         pred_masks=torch.tensor([[[[[3.0, -3.0], [-3.0, 3.0]]]]], dtype=torch.float32),
         iou_scores=torch.ones(1, 1, 1),
     )
@@ -308,83 +299,31 @@ def test_postprocess_dispatches_sam_prompt_outputs():
     assert preds[0].shape == (1, 1, 2, 2)
 
 
-def test_postprocess_dispatches_sam3_instance_outputs():
-    outputs = SimpleNamespace(
+def test_postprocess_sam3_full_outputs_default_to_instance_and_can_use_semantic():
+    outputs = _outputs(
+        "Sam3ImageSegmentationOutput",
         pred_logits=torch.tensor([[3.0, -3.0]], dtype=torch.float32),
         pred_boxes=torch.tensor([[[0.0, 0.0, 1.0, 1.0], [0.1, 0.1, 0.2, 0.2]]], dtype=torch.float32),
         pred_masks=torch.tensor([[[[3.0, -3.0], [-3.0, 3.0]], [[-3.0, -3.0], [-3.0, -3.0]]]], dtype=torch.float32),
+        semantic_seg=torch.tensor([[[[3.0, -3.0], [-3.0, 3.0]]]], dtype=torch.float32),
     )
 
-    results = postprocess(
+    instance_results = postprocess(
         outputs,
         target_sizes=[(2, 2)],
         threshold=0.5,
         rankseg_kwargs={"metric": "accuracy"},
     )
-
-    assert len(results) == 1
-    assert results[0]["scores"].shape == (1,)
-    assert results[0]["boxes"].shape == (1, 4)
-    assert results[0]["masks"].shape == (1, 2, 2)
-
-
-def test_postprocess_auto_dispatches_sam3_semantic_outputs():
-    outputs = _outputs(
-        "Sam3ImageSegmentationOutput",
-        semantic_seg=torch.tensor([[[[3.0, -3.0], [-3.0, 3.0]]]], dtype=torch.float32),
-    )
-
-    preds = postprocess(
-        outputs,
-        target_sizes=[(2, 2)],
-        rankseg_kwargs={"metric": "accuracy"},
-    )
-
-    assert isinstance(preds, list)
-    assert len(preds) == 1
-    assert preds[0].shape == (2, 2)
-
-
-def test_postprocess_sam3_full_outputs_default_to_instance():
-    outputs = _outputs(
-        "Sam3ImageSegmentationOutput",
-        pred_logits=torch.tensor([[3.0, -3.0]], dtype=torch.float32),
-        pred_boxes=torch.tensor([[[0.0, 0.0, 1.0, 1.0], [0.1, 0.1, 0.2, 0.2]]], dtype=torch.float32),
-        pred_masks=torch.tensor([[[[3.0, -3.0], [-3.0, 3.0]], [[-3.0, -3.0], [-3.0, -3.0]]]], dtype=torch.float32),
-        semantic_seg=torch.tensor([[[[3.0, -3.0], [-3.0, 3.0]]]], dtype=torch.float32),
-    )
-
-    results = postprocess(
-        outputs,
-        target_sizes=[(2, 2)],
-        threshold=0.5,
-        rankseg_kwargs={"metric": "accuracy"},
-    )
-
-    assert len(results) == 1
-    assert set(results[0]) == {"scores", "boxes", "masks"}
-    assert results[0]["masks"].shape == (1, 2, 2)
-
-
-def test_postprocess_sam3_full_outputs_use_semantic_when_requested():
-    outputs = _outputs(
-        "Sam3ImageSegmentationOutput",
-        pred_logits=torch.tensor([[3.0, -3.0]], dtype=torch.float32),
-        pred_boxes=torch.tensor([[[0.0, 0.0, 1.0, 1.0], [0.1, 0.1, 0.2, 0.2]]], dtype=torch.float32),
-        pred_masks=torch.tensor([[[[3.0, -3.0], [-3.0, 3.0]], [[-3.0, -3.0], [-3.0, -3.0]]]], dtype=torch.float32),
-        semantic_seg=torch.tensor([[[[3.0, -3.0], [-3.0, 3.0]]]], dtype=torch.float32),
-    )
-
-    preds = postprocess(
+    semantic_preds = postprocess(
         outputs,
         sam_task="semantic",
         target_sizes=[(2, 2)],
         rankseg_kwargs={"metric": "accuracy"},
     )
 
-    assert isinstance(preds, list)
-    assert len(preds) == 1
-    assert preds[0].shape == (2, 2)
+    assert set(instance_results[0]) == {"scores", "boxes", "masks"}
+    assert instance_results[0]["masks"].shape == (1, 2, 2)
+    assert semantic_preds[0].shape == (2, 2)
 
 
 def test_postprocess_rejects_unknown_sam_task():
@@ -392,3 +331,26 @@ def test_postprocess_rejects_unknown_sam_task():
 
     with pytest.raises(ValueError, match="sam_task"):
         postprocess(outputs, sam_task="panoptic", target_sizes=[(2, 2)])
+
+
+@pytest.mark.parametrize(
+    "outputs",
+    [
+        SimpleNamespace(pred_masks=torch.randn(1, 1, 1, 2, 2), iou_scores=torch.ones(1, 1, 1)),
+        SimpleNamespace(
+            pred_logits=torch.tensor([[3.0, -3.0]], dtype=torch.float32),
+            pred_boxes=torch.tensor([[[0.0, 0.0, 1.0, 1.0], [0.1, 0.1, 0.2, 0.2]]], dtype=torch.float32),
+            pred_masks=torch.randn(1, 2, 2, 2),
+        ),
+    ],
+)
+def test_unknown_sam_like_outputs_do_not_enter_sam_path(outputs):
+    with pytest.raises(ValueError, match="model-specific semantic reconstruction"):
+        postprocess(outputs, original_sizes=[(2, 2)])
+
+
+def test_sam_task_requires_supported_sam_output_class():
+    outputs = SimpleNamespace(semantic_seg=torch.randn(1, 1, 2, 2))
+
+    with pytest.raises(ValueError, match="supported transformers SAM structured outputs"):
+        postprocess(outputs, sam_task="semantic", target_sizes=[(2, 2)])

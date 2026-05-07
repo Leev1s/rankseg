@@ -107,6 +107,17 @@ def _matches_config_class(model, class_name: str) -> bool:
     return type(getattr(model, "config", None)).__name__ == class_name
 
 
+def _sam_output_family(outputs) -> str | None:
+    output_class = type(outputs).__name__
+    if output_class in {"SamImageSegmentationOutput", "SamHQImageSegmentationOutput"}:
+        return "sam1_prompt"
+    if output_class == "Sam2ImageSegmentationOutput":
+        return "sam2_prompt"
+    if output_class in {"Sam3ImageSegmentationOutput", "Sam3LiteTextImageSegmentationOutput"}:
+        return "sam3"
+    return None
+
+
 def _is_sam3_instance_outputs(outputs) -> bool:
     return (
         _get_output_value(outputs, "pred_logits") is not None
@@ -119,13 +130,6 @@ def _is_sam_prompt_outputs(outputs) -> bool:
     return (
         _get_output_value(outputs, "pred_masks") is not None
         and _get_output_value(outputs, "iou_scores") is not None
-    )
-
-
-def _is_sam3_semantic_outputs(outputs) -> bool:
-    return _get_output_value(outputs, "semantic_seg") is not None and (
-        _matches_output_class(outputs, "Sam3ImageSegmentationOutput")
-        or _matches_output_class(outputs, "Sam3LiteTextImageSegmentationOutput")
     )
 
 
@@ -279,6 +283,39 @@ def restore_sam_mask_probs(
     apply_non_overlapping_constraints=False,
 ):
     sam_task = _normalize_sam_task(sam_task)
+    sam_family = _sam_output_family(outputs)
+
+    if sam_family is None:
+        raise ValueError("Unsupported SAM output class. Pass the original transformers SAM structured output.")
+
+    if sam_family == "sam1_prompt":
+        if sam_task not in (None, "prompt"):
+            raise ValueError("SAM1-style outputs only support `sam_task=None` or `sam_task='prompt'`.")
+        if not _is_sam_prompt_outputs(outputs):
+            raise ValueError("SAM1-style outputs require `outputs.pred_masks` and `outputs.iou_scores`.")
+        pred_masks = _get_output_value(outputs, "pred_masks")
+        if not isinstance(pred_masks, torch.Tensor):
+            raise TypeError("`outputs.pred_masks` must be a torch.Tensor.")
+        return _restore_sam1_prompt_mask_probs(
+            pred_masks,
+            original_sizes=original_sizes,
+            reshaped_input_sizes=reshaped_input_sizes,
+            pad_size=pad_size,
+        )
+
+    if sam_family == "sam2_prompt":
+        if sam_task not in (None, "prompt"):
+            raise ValueError("SAM2 outputs only support `sam_task=None` or `sam_task='prompt'`.")
+        if not _is_sam_prompt_outputs(outputs):
+            raise ValueError("SAM2 outputs require `outputs.pred_masks` and `outputs.iou_scores`.")
+        pred_masks = _get_output_value(outputs, "pred_masks")
+        if not isinstance(pred_masks, torch.Tensor):
+            raise TypeError("`outputs.pred_masks` must be a torch.Tensor.")
+        return _restore_sam2_prompt_mask_probs(
+            pred_masks,
+            original_sizes=original_sizes,
+            apply_non_overlapping_constraints=apply_non_overlapping_constraints,
+        )
 
     if sam_task in (None, "instance") and _is_sam3_instance_outputs(outputs):
         return _restore_sam3_instance_mask_probs(
@@ -288,31 +325,21 @@ def restore_sam_mask_probs(
             threshold=threshold,
         )
 
-    if sam_task in (None, "semantic") and _get_output_value(outputs, "semantic_seg") is not None:
+    if sam_task == "semantic":
         return _restore_sam3_semantic_mask_probs(
             outputs,
             target_sizes=target_sizes,
             original_sizes=original_sizes,
         )
 
-    if sam_task in (None, "prompt") and _is_sam_prompt_outputs(outputs):
-        pred_masks = _get_output_value(outputs, "pred_masks")
-        if not isinstance(pred_masks, torch.Tensor):
-            raise TypeError("`outputs.pred_masks` must be a torch.Tensor.")
-        if _matches_output_class(outputs, "SamImageSegmentationOutput") or reshaped_input_sizes is not None:
-            return _restore_sam1_prompt_mask_probs(
-                pred_masks,
-                original_sizes=original_sizes,
-                reshaped_input_sizes=reshaped_input_sizes,
-                pad_size=pad_size,
-            )
-        return _restore_sam2_prompt_mask_probs(
-            pred_masks,
+    if sam_task is None and _get_output_value(outputs, "semantic_seg") is not None:
+        return _restore_sam3_semantic_mask_probs(
+            outputs,
+            target_sizes=target_sizes,
             original_sizes=original_sizes,
-            apply_non_overlapping_constraints=apply_non_overlapping_constraints,
         )
 
-    raise ValueError(f"Unsupported SAM outputs structure for `sam_task` {sam_task!r}.")
+    raise ValueError(f"Unsupported SAM3 outputs structure for `sam_task` {sam_task!r}.")
 
 
 def _rankseg_kwargs(rankseg_kwargs, *, default_output_mode: str) -> dict:
@@ -382,6 +409,7 @@ def _postprocess_sam_outputs(
     apply_non_overlapping_constraints=False,
 ):
     sam_task = _normalize_sam_task(sam_task)
+    sam_family = _sam_output_family(outputs)
     mask_probs = restore_sam_mask_probs(
         outputs,
         sam_task=sam_task,
@@ -392,9 +420,7 @@ def _postprocess_sam_outputs(
         pad_size=pad_size,
         apply_non_overlapping_constraints=apply_non_overlapping_constraints,
     )
-    if sam_task == "semantic" or (
-        sam_task is None and _is_sam3_semantic_outputs(outputs) and not _is_sam3_instance_outputs(outputs)
-    ):
+    if sam_task == "semantic" or (sam_family == "sam3" and sam_task is None and not _is_sam3_instance_outputs(outputs)):
         return _predict_sam_semantic_mask_probs(mask_probs, rankseg_kwargs)
     return _predict_sam_mask_probs(mask_probs, rankseg_kwargs)
 
@@ -479,12 +505,8 @@ def postprocess(
     pad_size=None,
     apply_non_overlapping_constraints=False,
 ):
-    if (
-        _is_sam3_instance_outputs(outputs)
-        or _is_sam_prompt_outputs(outputs)
-        or _is_sam3_semantic_outputs(outputs)
-        or sam_task is not None
-    ):
+    sam_family = _sam_output_family(outputs)
+    if sam_family is not None:
         return _postprocess_sam_outputs(
             outputs,
             sam_task=sam_task,
@@ -496,6 +518,9 @@ def postprocess(
             pad_size=pad_size,
             apply_non_overlapping_constraints=apply_non_overlapping_constraints,
         )
+    if sam_task is not None:
+        _normalize_sam_task(sam_task)
+        raise ValueError("`sam_task` can only be used with supported transformers SAM structured outputs.")
 
     probs = restore_semantic_probs(outputs, model=model, target_sizes=target_sizes)
 
